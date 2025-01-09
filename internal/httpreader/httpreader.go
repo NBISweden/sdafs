@@ -1,0 +1,438 @@
+// Package provides a io.Reader implementation on top of http
+package httpreader
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+)
+
+// TODO: Make something better that does TTLing
+
+var cache map[string][]HttpReaderCacheBlock
+var cacheLock sync.Mutex
+var prefetches map[string][]int64
+var prefetchLock sync.Mutex
+
+var once sync.Once
+
+// HttpReaderCacheBlock is used to keep track of cached data
+type HttpReaderCacheBlock struct {
+	start  int64
+	length int64
+	data   []byte
+}
+
+func (r *HttpReader) initCache() {
+	once.Do(func() {
+		// Make the map if not done yet
+		cache = make(map[string][]HttpReaderCacheBlock)
+		prefetches = make(map[string][]int64)
+
+	})
+
+	cacheLock.Lock()
+	_, found := cache[r.fileURL]
+	if !found {
+		cache[r.fileURL] = make([]HttpReaderCacheBlock, 0, 32)
+	}
+	cacheLock.Unlock()
+
+	prefetchLock.Lock()
+	_, found = prefetches[r.fileURL]
+	if !found {
+		prefetches[r.fileURL] = make([]int64, 0, 32)
+	}
+	prefetchLock.Unlock()
+}
+
+// HttpReader is the vehicle to keep track of needed state for the reader
+type HttpReader struct {
+	client        *http.Client
+	currentOffset int64
+
+	fileURL      string
+	objectSize   int64
+	lock         sync.Mutex
+	token        string
+	extraHeaders *http.Header
+}
+
+func NewHttpReader(fileURL, token string, objectSize int64, client *http.Client, headers *http.Header) (*HttpReader, error) {
+
+	log.Printf("Creating reader for %v, object size %v", fileURL, objectSize)
+	reader := &HttpReader{
+		client,
+		0,
+		fileURL,
+		objectSize,
+		sync.Mutex{},
+		token,
+		headers,
+	}
+
+	reader.initCache()
+
+	return reader, nil
+}
+
+func (r *HttpReader) Close() (err error) {
+
+	return nil
+}
+
+func (r *HttpReader) pruneCache() {
+	cacheLock.Lock()
+	defer cacheLock.Unlock()
+
+	if len(cache[r.fileURL]) < 16 {
+		return
+	}
+
+	// Prune the cache
+	keepfrom := len(cache[r.fileURL]) - 8
+	cache[r.fileURL] = cache[r.fileURL][keepfrom:]
+
+}
+
+func (r *HttpReader) prefetchSize() int64 {
+
+	return 10 * 1024 * 1024 / 65536 * (65536 + 28)
+}
+
+func (r *HttpReader) doFetch(rangeSpec string) ([]byte, error) {
+	useURL := r.fileURL
+
+	if rangeSpec != "" {
+		// Archive being broken regarding ranges for now,
+		// use query parameters instead.
+
+		byteRange := strings.TrimPrefix(rangeSpec, "bytes=")
+		byteRanges := strings.Split(byteRange, "-")
+
+		if byteRanges[0] == "" {
+			useURL += "?startCoordinate=0"
+		} else {
+			useURL += "?startCoordinate=" + byteRanges[0]
+		}
+
+		if byteRanges[1] == "" {
+			useURL += "&endCoordinate=" + fmt.Sprintf("%d", r.objectSize)
+		} else {
+			useURL += "&endCoordinate=" + byteRanges[1]
+		}
+	}
+
+	req, err := http.NewRequest("GET", useURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"Couldn't make request for %s: %v",
+			r.fileURL, err)
+	}
+
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", r.token))
+
+	if r.extraHeaders != nil {
+		for h := range *r.extraHeaders {
+			req.Header.Add(h, r.extraHeaders.Get(h))
+		}
+	}
+
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"Error while making request for %s: %v",
+			r.fileURL, err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		errData, err := io.ReadAll(resp.Body)
+
+		retErr := fmt.Errorf(
+			"Unexpected status code for request for %s: %d (%s)",
+			r.fileURL, resp.StatusCode, string(errData))
+
+		if err != nil {
+			retErr = fmt.Errorf(
+				"Unexpected status code for request for %s: %d "+
+					"(no more information, got %v while trying to read)",
+				r.fileURL, resp.StatusCode, err)
+		}
+
+		_ = resp.Body.Close()
+		return nil, retErr
+	}
+
+	dat, err := io.ReadAll(resp.Body)
+
+	return dat, err
+}
+
+func (r *HttpReader) isInCache(offset int64) bool {
+	cacheLock.Lock()
+	defer cacheLock.Unlock()
+	// Check if we have the data in cache
+	for _, p := range cache[r.fileURL] {
+		if offset >= p.start && offset < p.start+p.length {
+			// At least part of the data is here
+			return true
+		}
+	}
+
+	return false
+}
+
+func (r *HttpReader) prefetchAt(offset int64) {
+	r.pruneCache()
+
+	if offset >= r.objectSize {
+		// Don't try to prefetch what doesn't exist
+		return
+	}
+
+	if r.isInCache(offset) {
+		return
+	}
+
+	// Not found in cache, we should fetch the data
+
+	prefetchSize := r.prefetchSize()
+
+	if r.isPrefetching(offset) {
+		// We're already fetching this
+		return
+	}
+
+	r.addToOutstanding(offset)
+
+	wantedRange := fmt.Sprintf("bytes=%d-%d", offset, min(offset+prefetchSize-1, r.objectSize-1))
+
+	prefetchedData, err := r.doFetch(wantedRange)
+
+	r.removeFromOutstanding(offset)
+
+	if err != nil {
+		return
+	}
+
+	r.addToCache(HttpReaderCacheBlock{offset, int64(len(prefetchedData)), prefetchedData})
+}
+
+func (r *HttpReader) Seek(offset int64, whence int) (int64, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	switch whence {
+	case io.SeekStart:
+		if offset < 0 {
+			return r.currentOffset, fmt.Errorf("Invalid offset %v- can't be negative when seeking from start", offset)
+		}
+		if offset > r.objectSize {
+			return r.currentOffset, fmt.Errorf("Invalid offset %v - beyond end of object (size %v)", offset, r.objectSize)
+		}
+
+		r.currentOffset = offset
+		go r.prefetchAt(r.currentOffset)
+
+		return offset, nil
+
+	case io.SeekCurrent:
+		if r.currentOffset+offset < 0 {
+			return r.currentOffset, fmt.Errorf("Invalid offset %v from %v would be be before start", offset, r.currentOffset)
+		}
+		if offset > r.objectSize {
+			return r.currentOffset, fmt.Errorf("Invalid offset - %v from %v would end up beyond of object %v", offset, r.currentOffset, r.objectSize)
+		}
+
+		r.currentOffset += offset
+		go r.prefetchAt(r.currentOffset)
+
+		return r.currentOffset, nil
+
+	case io.SeekEnd:
+		if r.objectSize+offset < 0 {
+			return r.currentOffset, fmt.Errorf("Invalid offset %v from end in %v bytes object, would be before file start", offset, r.objectSize)
+		}
+		if r.objectSize+offset > r.objectSize {
+			return r.currentOffset, fmt.Errorf("Invalid offset %v from end in %v bytes object", offset, r.objectSize)
+		}
+
+		r.currentOffset = r.objectSize + offset
+		go r.prefetchAt(r.currentOffset)
+
+		return r.currentOffset, nil
+	}
+
+	return r.currentOffset, fmt.Errorf("Bad whence")
+}
+
+// addToCache adds a prefetch to the list of outstanding prefetches once it's no longer active
+func (r *HttpReader) addToCache(cacheBlock HttpReaderCacheBlock) {
+	cacheLock.Lock()
+	defer cacheLock.Unlock()
+
+	if len(cache[r.fileURL]) > 16 {
+		// Don't cache anything more right now
+		return
+	}
+
+	// Store in cache
+
+	cache[r.fileURL] = append(cache[r.fileURL], cacheBlock)
+
+}
+
+// addToOutstanding adds a prefetch to the list of outstanding prefetches once it's no longer active
+func (r *HttpReader) addToOutstanding(toAdd int64) {
+	prefetchLock.Lock()
+	prefetches[r.fileURL] = append(prefetches[r.fileURL], toAdd)
+	prefetchLock.Unlock()
+}
+
+// removeFromOutstanding removes a prefetch from the list of outstanding prefetches once it's no longer active
+func (r *HttpReader) removeFromOutstanding(toRemove int64) {
+	prefetchLock.Lock()
+	defer prefetchLock.Unlock()
+
+	switch len(prefetches[r.fileURL]) {
+	case 0:
+		// Nothing to do
+	case 1:
+		// Check if it's the one we should remove
+		if prefetches[r.fileURL][0] == toRemove {
+			prefetches[r.fileURL] = prefetches[r.fileURL][:0]
+		}
+
+	default:
+		remove := 0
+		found := false
+		for i, j := range prefetches[r.fileURL] {
+			if j == toRemove {
+				remove = i
+				found = true
+			}
+		}
+		if found {
+			prefetches[r.fileURL][remove] = prefetches[r.fileURL][len(prefetches[r.fileURL])-1]
+			prefetches[r.fileURL] = prefetches[r.fileURL][:len(prefetches[r.fileURL])-1]
+		}
+	}
+}
+
+// isPrefetching checks if the data is already being fetched
+func (r *HttpReader) isPrefetching(offset int64) bool {
+	prefetchLock.Lock()
+	defer prefetchLock.Unlock()
+
+	// Walk through the outstanding prefetches
+	for _, p := range prefetches[r.fileURL] {
+		if offset >= p && offset < p+r.prefetchSize() {
+			// At least some of this read is already being fetched
+
+			return true
+		}
+	}
+
+	return false
+}
+
+func (r *HttpReader) doRequest() (*http.Response, error) {
+
+	req, err := http.NewRequest("GET", r.fileURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"Couldn't make request for %s: %v",
+			r.fileURL, err)
+	}
+
+	if r.extraHeaders != nil {
+		for h := range *r.extraHeaders {
+			req.Header.Add(h, r.extraHeaders.Get(h))
+		}
+	}
+
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", r.token))
+	return r.client.Do(req)
+}
+
+func (r *HttpReader) Read(dst []byte) (n int, err error) {
+	r.lock.Lock()
+	start := r.currentOffset
+	r.lock.Unlock()
+
+	if start >= r.objectSize {
+		// For reading when there is no more data, just return EOF
+		return 0, io.EOF
+	}
+
+	// Check if we're already fetching this data
+	for r.isPrefetching(start) {
+		// Prefetch in progress, wait a while and see if it's finished
+
+		// TODO: runtime.Gosched() instead?
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	if r.isInCache(start) {
+		r.lock.Lock()
+		cacheLock.Lock()
+
+		defer r.lock.Unlock()
+		defer cacheLock.Unlock()
+
+		// Walk through the cache
+		for _, p := range cache[r.fileURL] {
+			if start >= p.start && start < p.start+p.length {
+				// At least part of the data is here
+
+				offsetInBlock := start - p.start
+
+				// Pull out wanted data (as much as we have)
+				n = copy(dst, p.data[offsetInBlock:])
+				r.currentOffset = start + int64(n)
+
+				// Prefetch the next bit
+				go r.prefetchAt(r.currentOffset)
+
+				return n, nil
+			}
+		}
+
+		// Expected in cache but not found, bail out and hope for better luck
+		// on retry
+		return 0, nil
+	}
+
+	// Not found in cache, need to fetch data
+	wantedRange := fmt.Sprintf("bytes=%d-%d", r.currentOffset, min(r.currentOffset+r.prefetchSize()-1, r.objectSize-1))
+
+	r.addToOutstanding(start)
+
+	data, err := r.doFetch(wantedRange)
+
+	r.removeFromOutstanding(start)
+
+	if err != nil {
+		return 0, err
+	}
+
+	// Add to cache
+	cacheBytes := bytes.Clone(data)
+	r.addToCache(HttpReaderCacheBlock{start, int64(len(cacheBytes)), cacheBytes})
+
+	b := bytes.NewBuffer(data)
+	n, err = b.Read(dst)
+
+	r.lock.Lock()
+	r.currentOffset = start + int64(n)
+	r.lock.Unlock()
+
+	go r.prefetchAt(r.currentOffset)
+
+	return n, err
+}
