@@ -8,7 +8,7 @@ require (
 	github.com/jarcoal/httpmock v1.3.1
 	github.com/neicnordic/crypt4gh v1.12.0
 	github.com/sevlyar/go-daemon v0.1.6
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/tj/assert v0.0.3
 	google.golang.org/grpc v1.69.2
 	google.golang.org/protobuf v1.36.2
