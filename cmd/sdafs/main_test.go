@@ -17,14 +17,8 @@ func TestConfOptionNoMountPoint(t *testing.T) {
 		getConfigs()
 		return
 	}
-	cmd := exec.Command(os.Args[0], "-test.run=TestConfOptionNoMountPoint")
-	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
-	err := cmd.Run()
-	if e, ok := err.(*exec.ExitError); ok && !e.Success() {
-		return
-	}
-	t.Fatalf("process succeeded without a mountpoint %v, want exit status 1",
-		err)
+
+	runExiting(t, "TestConfOptionNoMountPoint")
 }
 
 func TestConfOptions(t *testing.T) {
@@ -132,6 +126,20 @@ func TestRepoint(t *testing.T) {
 	assert.Nil(t, err, "Cleanup failed")
 }
 
+func runExiting(t *testing.T, testName string) {
+	cmd := exec.Command(os.Args[0], "-test.run="+testName)
+	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
+	err := cmd.Run()
+	if e, ok := err.(*exec.ExitError); ok && !e.Success() {
+		return
+	}
+
+	t.Fatalf("process when it should not for test %s %v, want exit status 1",
+		testName,
+		err)
+
+}
+
 func TestRepointFail(t *testing.T) {
 
 	// https://stackoverflow.com/a/33404435
@@ -140,13 +148,5 @@ func TestRepointFail(t *testing.T) {
 		repointLog(m)
 		return
 	}
-	cmd := exec.Command(os.Args[0], "-test.run=TestRepointFail")
-	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
-	err := cmd.Run()
-	if e, ok := err.(*exec.ExitError); ok && !e.Success() {
-		return
-	}
-
-	t.Fatalf("process succeeded for impossible log %v, want exit status 1",
-		err)
+	runExiting(t, "TestRepointFail")
 }

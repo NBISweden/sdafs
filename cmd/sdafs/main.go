@@ -28,7 +28,7 @@ type mainConfig struct {
 	mountPoint string
 	foreground bool
 	logFile    string
-	sdafsconf  *sdafs.SDAfsConf
+	sdafsconf  *sdafs.Conf
 }
 
 func getConfigs() mainConfig {
@@ -56,7 +56,7 @@ func getConfigs() mainConfig {
 		useLogFile = "sdafs.log"
 	}
 
-	conf := sdafs.SDAfsConf{
+	conf := sdafs.Conf{
 		RemoveSuffix:    true,
 		RootURL:         rootURL,
 		CredentialsFile: credentialsFile,
@@ -88,7 +88,7 @@ func repointLog(m mainConfig) {
 			log.Fatalf("Couldn't open requested log file %s: %v",
 				m.logFile, err)
 		}
-	
+
 		log.SetOutput(f)
 	}
 }
@@ -96,16 +96,18 @@ func repointLog(m mainConfig) {
 func detachIfNeeded(c mainConfig) {
 	if !c.foreground {
 		context := new(daemon.Context)
-		child, _ := context.Reborn()
+		child, err := context.Reborn()
+
+		if err != nil {
+			log.Fatalf("Failed to detach")
+		}
 
 		if child != nil {
 			os.Exit(0)
-		} else {
-			defer func() {
-				if err := context.Release(); err != nil {
-					log.Printf("Unable to release pid-file: %s", err.Error())
-				}
-			}()
+		}
+
+		if err := context.Release(); err != nil {
+			log.Printf("Unable to release pid-file: %s", err.Error())
 		}
 	}
 }

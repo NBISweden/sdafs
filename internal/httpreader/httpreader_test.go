@@ -13,15 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type testBytesBuffer struct {
-	bytes.Buffer
-}
-
-func (*testBytesBuffer) Close() error {
-	return nil
-}
-
-func testFailResponder(r *http.Request) (*http.Response, error) {
+func testFailResponder(_ *http.Request) (*http.Response, error) {
 	return nil, fmt.Errorf("This failed")
 }
 
@@ -52,8 +44,14 @@ func testDataResponder(r *http.Request) (*http.Response, error) {
 	}
 
 	var start, end int
-	_, _ = fmt.Sscanf(startC[0], "%d", &start)
-	_, _ = fmt.Sscanf(endC[0], "%d", &end)
+	startconv, err := fmt.Sscanf(startC[0], "%d", &start)
+	if err != nil || startconv != 1 {
+		return &http.Response{StatusCode: http.StatusInternalServerError}, nil
+	}
+	endconv, err := fmt.Sscanf(endC[0], "%d", &end)
+	if err != nil || endconv != 1 {
+		return &http.Response{StatusCode: http.StatusInternalServerError}, nil
+	}
 
 	resp.Body = io.NopCloser(bytes.NewBuffer(data[start : end+1]))
 
@@ -66,7 +64,7 @@ func clientPublicKeyHeader() *http.Header {
 	return &h
 }
 
-func TestHttpReader(t *testing.T) {
+func TestHTTPReader(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
@@ -74,7 +72,7 @@ func TestHttpReader(t *testing.T) {
 	httpmock.RegisterResponder("GET", url,
 		testDataResponder)
 
-	reader, err := NewHttpReader(url, "", 14000, http.DefaultClient, clientPublicKeyHeader())
+	reader, err := NewHTTPReader(url, "", 14000, http.DefaultClient, clientPublicKeyHeader())
 	assert.Nil(t, err, "Backend failed")
 
 	if reader == nil {
@@ -86,6 +84,7 @@ func TestHttpReader(t *testing.T) {
 	seeker := reader
 
 	_, err = seeker.Read(readBackBuffer[0:4096])
+	assert.Nil(t, err, "Read failed when it shouldn't")
 
 	// POSIX is more allowing
 	_, err = seeker.Seek(95000, io.SeekStart)
@@ -163,7 +162,7 @@ func TestHttpReader(t *testing.T) {
 
 }
 
-func TestHttpReaderPrefetches(t *testing.T) {
+func TestHTTPReaderPrefetches(t *testing.T) {
 	// Some special tests here, messing with internals to expose behaviour
 
 	httpmock.Activate()
@@ -179,7 +178,8 @@ func TestHttpReaderPrefetches(t *testing.T) {
 		testFailResponder)
 
 	var readBackBuffer [4096]byte
-	seeker, err := NewHttpReader(url, "token", 14000, http.DefaultClient, clientPublicKeyHeader())
+	seeker, err := NewHTTPReader(url, "token", 14000, http.DefaultClient, clientPublicKeyHeader())
+	assert.Nil(t, err, "New reader failed unexpectedly")
 
 	_, err = seeker.Read(readBackBuffer[0:4096])
 	// assert.Equal(t, writeData, readBackBuffer[:14], "did not read back data as expected")
@@ -188,7 +188,7 @@ func TestHttpReaderPrefetches(t *testing.T) {
 	err = seeker.Close()
 	assert.Nil(t, err, "unexpected error when closing")
 
-	reader, err := NewHttpReader(url, "token", 14000, http.DefaultClient,
+	reader, err := NewHTTPReader(url, "token", 14000, http.DefaultClient,
 		clientPublicKeyHeader())
 	assert.Nil(t, err, "unexpected error when creating reader")
 	assert.NotNil(t, reader, "unexpected error when creating reader")
@@ -200,27 +200,27 @@ func TestHttpReaderPrefetches(t *testing.T) {
 	// Clear cache
 	cache[url] = cache[url][:0]
 
-	prefetches[url] = []int64{}
+	prefetches[url] = []uint64{}
 	t.Logf("Cache %v, outstanding %v", cache[url], prefetches[url])
 
 	for i := 0; i < 30; i++ {
-		cache[url] = append(cache[url], HttpReaderCacheBlock{90000000, int64(0), nil})
+		cache[url] = append(cache[url], CacheBlock{90000000, uint64(0), nil})
 	}
 	s.prefetchAt(0)
 	assert.Equal(t, 9, len(cache[url]), "unexpected length of cache after prefetch")
 
-	prefetches[url] = []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+	prefetches[url] = []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 	s.removeFromOutstanding(9)
-	assert.Equal(t, prefetches[url], []int64{0, 1, 2, 3, 4, 5, 6, 7, 8}, "unexpected outstanding prefetches after remove")
+	assert.Equal(t, prefetches[url], []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8}, "unexpected outstanding prefetches after remove")
 	s.removeFromOutstanding(19)
-	assert.Equal(t, prefetches[url], []int64{0, 1, 2, 3, 4, 5, 6, 7, 8}, "unexpected outstanding prefetches after remove")
+	assert.Equal(t, prefetches[url], []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8}, "unexpected outstanding prefetches after remove")
 	s.removeFromOutstanding(5)
 	// We don't care about the internal order, sort for simplicity
 	slices.Sort(prefetches[url])
-	assert.Equal(t, prefetches[url], []int64{0, 1, 2, 3, 4, 6, 7, 8}, "unexpected outstanding prefetches after remove")
+	assert.Equal(t, prefetches[url], []uint64{0, 1, 2, 3, 4, 6, 7, 8}, "unexpected outstanding prefetches after remove")
 }
 
-func TestHttpReaderFailures(t *testing.T) {
+func TestHTTPReaderFailures(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
@@ -236,7 +236,7 @@ func TestHttpReaderFailures(t *testing.T) {
 
 	var readBackBuffer [4096]byte
 
-	failreader, err := NewHttpReader(failurl, "token", 14000, http.DefaultClient, nil)
+	failreader, err := NewHTTPReader(failurl, "token", 14000, http.DefaultClient, nil)
 	// We don't fail yet
 	assert.Nil(t, err, "unexpected error when creating reader")
 	assert.NotNil(t, failreader, "unexpected error when creating reader")
@@ -245,7 +245,7 @@ func TestHttpReaderFailures(t *testing.T) {
 	assert.Equal(t, 0, n, "unexpected data read from broken reader")
 	assert.NotNil(t, err, "unexpected lack of error when using broken reader")
 
-	noheaderreader, err := NewHttpReader(url, "token", 14000, http.DefaultClient, nil)
+	noheaderreader, err := NewHTTPReader(url, "token", 14000, http.DefaultClient, nil)
 	// We don't fail yet
 	assert.Nil(t, err, "unexpected error when creating reader")
 	assert.NotNil(t, noheaderreader, "unexpected error when creating reader")
@@ -287,7 +287,7 @@ func TestDoRequest(t *testing.T) {
 	httpmock.RegisterResponder("GET", checkurl,
 		testDoRequestResponder)
 
-	r := HttpReader{
+	r := HTTPReader{
 		fileURL: checkurl,
 		token:   "token",
 		client:  http.DefaultClient,
@@ -299,6 +299,7 @@ func TestDoRequest(t *testing.T) {
 
 	msg, err := io.ReadAll(resp.Body)
 	assert.Equal(t, []byte("Auth:Bearer token A: B: "), msg, "Unexpected headers from doRequest")
+	assert.Nil(t, err, "Unexpected error from doRequest")
 
 	h := http.Header{}
 	r.extraHeaders = &h
@@ -310,16 +311,18 @@ func TestDoRequest(t *testing.T) {
 	assert.Nil(t, err, "Unexpected error from doRequest")
 
 	msg, err = io.ReadAll(resp.Body)
-	assert.Equal(t, []byte("Auth:Bearer token A:SomeGoose B: "), msg, "Unexpected headers from doRequest")
+	assert.Equal(t, []byte("Auth:Bearer token A:SomeGoose B: "), msg, "Unexpected headers from doRequest with A header")
+	assert.Nil(t, err, "Unexpected error from doRequest")
 
 	h.Add("HeaderB", "SomeELSE")
 
 	resp, err = r.doRequest()
 
-	assert.Equal(t, http.StatusOK, resp.StatusCode, "Unexpected status code for doRequest")
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "Unexpected status code for doRequest with A and B headers")
 	assert.Nil(t, err, "Unexpected error from doRequest")
 
 	msg, err = io.ReadAll(resp.Body)
 	assert.Equal(t, []byte("Auth:Bearer token A:SomeGoose B:SomeELSE "), msg, "Unexpected headers from doRequest")
+	assert.Nil(t, err, "Unexpected error from doRequest")
 
 }

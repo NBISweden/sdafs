@@ -14,7 +14,10 @@ import (
 func uid() uint32 {
 	currentUser, err := user.Current()
 	if err == nil {
-		uid, _ := strconv.Atoi(currentUser.Uid)
+		uid, err := strconv.Atoi(currentUser.Uid)
+		if err != nil {
+			return 0
+		}
 		return uint32(uid)
 	}
 	return 0
@@ -23,25 +26,28 @@ func uid() uint32 {
 func gid() uint32 {
 	currentUser, err := user.Current()
 	if err == nil {
-		gid, _ := strconv.Atoi(currentUser.Gid)
+		gid, err := strconv.Atoi(currentUser.Gid)
+		if err != nil {
+			return 0
+		}
 		return uint32(gid)
 	}
 	return 0
 
 }
 
-func TestSDAfsConfOptions(t *testing.T) {
+func TestConfOptions(t *testing.T) {
 
 	httpmock.Activate()
 	httpmock.RegisterResponder("GET", "https://my.sda.local/metadata/datasets",
 		httpmock.NewStringResponder(200, `["dataset1", "dataset2"]`))
 
-	c := SDAfsConf{}
+	c := Conf{}
 	c.CredentialsFile = "test.ini"
 	c.RootURL = "https://my.sda.local"
-	c.HttpClient = http.DefaultClient
-	c.Gid = 1200
-	c.Uid = 999
+	c.HTTPClient = http.DefaultClient
+	c.GID = 1200
+	c.UID = 999
 	c.DirPerms = 0111
 	c.FilePerms = 01
 
@@ -58,8 +64,8 @@ func TestSDAfsConfOptions(t *testing.T) {
 
 	c.SpecifyDirPerms = true
 	c.SpecifyFilePerms = true
-	c.SpecifyUid = true
-	c.SpecifyGid = true
+	c.SpecifyUID = true
+	c.SpecifyGID = true
 
 	sda, err = NewSDAfs(&c)
 
@@ -79,7 +85,7 @@ func TestNewSDAfs(t *testing.T) {
 	assert.Nil(t, sda, "Got a sda when we should not")
 	assert.NotNil(t, err, "No error when expected")
 
-	c := SDAfsConf{}
+	c := Conf{}
 	sda, err = NewSDAfs(&c)
 
 	assert.Nil(t, sda, "Got a sda when we should not")
@@ -93,7 +99,7 @@ func TestNewSDAfs(t *testing.T) {
 
 	c.CredentialsFile = "test.ini"
 	c.RootURL = "https://my.sda.local"
-	c.HttpClient = http.DefaultClient
+	c.HTTPClient = http.DefaultClient
 	sda, err = NewSDAfs(&c)
 
 	assert.Nil(t, sda, "Got a sda when we should not")
@@ -118,9 +124,9 @@ func TestDatasetLoad(t *testing.T) {
 	httpmock.RegisterResponder("GET", "https://my.sda.local/metadata/datasets",
 		httpmock.NewStringResponder(200, `["dataset1", "dataset2", "dataset3"]`))
 
-	c := SDAfsConf{CredentialsFile: "test.ini",
+	c := Conf{CredentialsFile: "test.ini",
 		RootURL:    "https://my.sda.local/",
-		HttpClient: http.DefaultClient}
+		HTTPClient: http.DefaultClient}
 
 	sda, err := NewSDAfs(&c)
 

@@ -3,12 +3,12 @@ package sdafs
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -33,7 +33,7 @@ import (
 // SDAfs is the main structure to keep track of our SDA connection
 type SDAfs struct {
 	fuseutil.NotImplementedFileSystem
-	conf           *SDAfsConf
+	conf           *Conf
 	datasets       []string
 	loading        []string
 	publicC4GHkey  string
@@ -41,6 +41,7 @@ type SDAfs struct {
 	token          string
 	Owner          uint32
 	Group          uint32
+	runAs          uint32
 	DirPerms       os.FileMode
 	FilePerms      os.FileMode
 	inodes         map[fuseops.InodeID]*inode
@@ -180,43 +181,48 @@ func (s *SDAfs) getDatasets() error {
 	return nil
 }
 
-type SDAfsConf struct {
+type Conf struct {
 	CredentialsFile  string
 	RootURL          string
 	RemoveSuffix     bool
-	SpecifyUid       bool
-	SpecifyGid       bool
-	Uid              uint32
-	Gid              uint32
+	SpecifyUID       bool
+	SpecifyGID       bool
+	UID              uint32
+	GID              uint32
 	SpecifyDirPerms  bool
 	SpecifyFilePerms bool
 	SkipLevels       int
 	DirPerms         os.FileMode
 	FilePerms        os.FileMode
-	HttpClient       *http.Client
+	HTTPClient       *http.Client
 }
 
 type datasetFile struct {
-	FileId                    string `json:"fileId"`
+	FileID                    string `json:"fileId"`
 	FilePath                  string `json:"filePath"`
-	DecryptedFileSize         int    `json:"decryptedFileSize"`
+	DecryptedFileSize         uint64 `json:"decryptedFileSize"`
 	DecryptedFileChecksum     string `json:"decryptedFileChecksum"`
 	DecryptedFileChecksumType string `json:"decryptedFileChecksumType"`
 	FileStatus                string `json:"fileStatus"`
-	FileSize                  int    `json:"fileSize"`
+	FileSize                  uint64 `json:"fileSize"`
 	CreatedAt                 string `json:"createdAt"`
 	LastModified              string `json:"lastModified"`
+	strippedName              string
 }
 
-func NewSDAfs(conf *SDAfsConf) (*SDAfs, error) {
+func NewSDAfs(conf *Conf) (*SDAfs, error) {
 	n := new(SDAfs)
 	n.conf = conf
 
-	n.setup()
-	err := n.VerifyCredentials()
+	err := n.setup()
+	if err != nil {
+		return nil, fmt.Errorf("setup failed: %v", err)
+	}
+
+	err = n.VerifyCredentials()
 
 	if err != nil {
-		return nil, fmt.Errorf("Error while verifying credentials: %v", err)
+		return nil, fmt.Errorf("error while verifying credentials: %v", err)
 	}
 
 	return n, nil
@@ -228,13 +234,13 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 
 	if err != nil {
 		return nil, fmt.Errorf(
-			"Error while making dataset request: %v",
+			"error while making dataset request: %v",
 			err)
 	}
 
 	if r.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf(
-			"Dataset request didn't return 200, we got %d",
+			"dataset request didn't return 200, we got %d",
 			r.StatusCode)
 	}
 
@@ -243,19 +249,19 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 	text, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"Error while reading dataset content response: %v",
+			"error while reading dataset content response: %v",
 			err)
 	}
 
 	err = json.Unmarshal(text, &contents)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"Error while doing unmarshal of dataset contents %v: %v",
+			"error while doing unmarshal of dataset contents %v: %v",
 			text, err)
 	}
 
 	// Until the archive presents the view they want to expose
-	for i, _ := range contents {
+	for i := range contents {
 		fp := contents[i].FilePath
 		_, fpnew, found := strings.Cut(fp, "/")
 
@@ -271,31 +277,25 @@ func (s *SDAfs) createRoot() {
 
 	entries := make([]fuseutil.Dirent, 0)
 
+	dirAttrs := fuseops.InodeAttributes{
+		Nlink: 1,
+		Mode:  s.DirPerms | os.ModeDir,
+		Uid:   s.Owner,
+		Gid:   s.Group,
+		Mtime: s.startTime,
+		Ctime: s.startTime,
+		Atime: s.startTime,
+	}
+
 	root := inode{dir: true,
-		attr: fuseops.InodeAttributes{
-			Nlink: 1,
-			Mode:  s.DirPerms | os.ModeDir,
-			Uid:   s.Owner,
-			Gid:   s.Group,
-			Mtime: s.startTime,
-			Ctime: s.startTime,
-			Atime: s.startTime,
-		},
+		attr: dirAttrs,
 	}
 	s.addInode(&root)
 
 	for i, dataset := range s.datasets {
 
 		datasetInode := inode{
-			attr: fuseops.InodeAttributes{
-				Nlink: 1,
-				Mode:  s.DirPerms | os.ModeDir,
-				Uid:   s.Owner,
-				Gid:   s.Group,
-				Mtime: s.startTime,
-				Ctime: s.startTime,
-				Atime: s.startTime,
-			},
+			attr:    dirAttrs,
 			dir:     true,
 			dataset: dataset,
 			key:     "/",
@@ -304,7 +304,7 @@ func (s *SDAfs) createRoot() {
 		in := s.addInode(&datasetInode)
 
 		e := fuseutil.Dirent{
-			Offset: fuseops.DirOffset(i + 1),
+			Offset: fuseops.DirOffset(i + 1), // #nosec G115
 			Inode:  in,
 			Name:   dataset,
 		}
@@ -320,11 +320,11 @@ func (s *SDAfs) loadDataset(dataSetName string) error {
 
 	contents, err := s.getDatasetContents(dataSetName)
 	if err != nil {
-		return fmt.Errorf("Error while getting contents for %s: %v",
+		return fmt.Errorf("error while getting contents for %s: %v",
 			dataSetName, err)
 	}
 
-	var datasetBase *inode = nil
+	var datasetBase *inode
 
 	// Find the inode to attach stuff to by looking at the root and checking
 	// entries
@@ -337,7 +337,7 @@ func (s *SDAfs) loadDataset(dataSetName string) error {
 	}
 
 	if datasetBase == nil {
-		return fmt.Errorf("Didn't find dataset %s in root inode", dataSetName)
+		return fmt.Errorf("didn't find dataset %s in root inode", dataSetName)
 	}
 
 	// Go through the list of files and attach, create directory entries and
@@ -345,84 +345,20 @@ func (s *SDAfs) loadDataset(dataSetName string) error {
 	doneDirs := make(map[string]*inode)
 	doneDirs[""] = s.inodes[datasetBase.id]
 
+	s.trimNames(&contents)
+
 	for _, entry := range contents {
-		if entry.FileStatus != "ready" {
-			continue
-		}
+		s.attachSDAObject(doneDirs, entry, dataSetName)
+	}
+
+	return nil
+}
+
+func (s *SDAfs) trimNames(contents *[]datasetFile) {
+
+	for _, entry := range *contents {
 
 		split := strings.Split(entry.FilePath, "/")
-
-		if s.conf.SkipLevels > 0 {
-			split = split[s.conf.SkipLevels:]
-		}
-
-		if len(split) < 2 {
-			// Directly in the base of the dataset
-			continue
-		}
-
-		parent := ""
-
-		// First make sure the directory structure needed for the file exists
-		for i := 1; i < len(split); i++ {
-			consider := filepath.Join(split[:i]...)
-
-			_, found := doneDirs[consider]
-
-			if found {
-				// Already "created" the directory for this entry
-				parent = consider
-				continue
-			}
-
-			// Not found, we need to make a directory entry and attach it
-			// to parent
-
-			dirInode := inode{
-				attr: fuseops.InodeAttributes{
-					Nlink: 1,
-					Mode:  s.DirPerms | os.ModeDir,
-					Uid:   s.Owner,
-					Gid:   s.Group,
-					Mtime: s.startTime,
-					Ctime: s.startTime,
-					Atime: s.startTime,
-				},
-				dir:     true,
-				dataset: dataSetName,
-				key:     consider,
-				entries: make([]fuseutil.Dirent, 0),
-			}
-
-			dIn := s.addInode(&dirInode)
-			doneDirs[consider] = &dirInode
-
-			parentInode := s.inodes[doneDirs[parent].id]
-
-			newEntry := fuseutil.Dirent{
-				Offset: fuseops.DirOffset(len(parentInode.entries) + 1),
-				Inode:  dIn,
-				Name:   split[i-1],
-			}
-
-			parentInode.entries = append(parentInode.entries, newEntry)
-
-			parent = consider
-		}
-
-		// The directory structure should exist now
-
-		mtime, err := time.Parse(time.RFC3339, entry.LastModified)
-		if err != nil {
-			log.Printf("Error while decoding modified for %s timestamp %s : %v",
-				entry.FileId, entry.LastModified, err)
-		}
-		ctime, err := time.Parse(time.RFC3339, entry.CreatedAt)
-		if err != nil {
-			log.Printf("Error while decoding created for %s timestamp %s: %v",
-				entry.FileId, entry.CreatedAt, err)
-		}
-
 		fileName := split[len(split)-1]
 
 		if s.conf.RemoveSuffix {
@@ -434,7 +370,7 @@ func (s *SDAfs) loadDataset(dataSetName string) error {
 			// by stripping
 
 			found := false
-			for _, p := range contents {
+			for _, p := range *contents {
 				if p.FilePath == strippedFull {
 					found = true
 					break
@@ -447,40 +383,121 @@ func (s *SDAfs) loadDataset(dataSetName string) error {
 			}
 		}
 
-		dirName := filepath.Join(split[:len(split)-1]...)
+		entry.strippedName = fileName
+	}
+}
 
-		fInode := inode{
+func (s *SDAfs) attachSDAObject(doneDirs map[string]*inode,
+	entry datasetFile,
+	dataSetName string) {
+	if entry.FileStatus != "ready" {
+		return
+	}
+
+	split := strings.Split(entry.FilePath, "/")
+
+	if s.conf.SkipLevels > 0 {
+		split = split[s.conf.SkipLevels:]
+	}
+
+	if len(split) < 2 {
+		// Entry directly in the base of the dataset
+		return
+	}
+
+	parent := ""
+
+	// First make sure the directory structure needed for the file exists
+	for i := 1; i < len(split); i++ {
+		consider := filepath.Join(split[:i]...)
+
+		_, found := doneDirs[consider]
+
+		if found {
+			// Already "created" the directory for this entry
+			parent = consider
+			continue
+		}
+
+		// Not found, we need to make a directory entry and attach it
+		// to parent
+
+		dirInode := inode{
 			attr: fuseops.InodeAttributes{
 				Nlink: 1,
+				Mode:  s.DirPerms | os.ModeDir,
 				Uid:   s.Owner,
 				Gid:   s.Group,
-				Mtime: mtime,
-				Ctime: ctime,
-				Atime: mtime,
-				Mode:  s.FilePerms,
-				Size:  uint64(entry.DecryptedFileSize),
+				Mtime: s.startTime,
+				Ctime: s.startTime,
+				Atime: s.startTime,
 			},
-			dir:         false,
-			dataset:     dataSetName,
-			key:         entry.FilePath,
-			fileSize:    uint64(entry.DecryptedFileSize),
-			rawFileSize: uint64(entry.FileSize),
+			dir:     true,
+			dataset: dataSetName,
+			key:     consider,
+			entries: make([]fuseutil.Dirent, 0),
 		}
-		fIn := s.addInode(&fInode)
 
-		parentInode := s.inodes[doneDirs[dirName].id]
+		dIn := s.addInode(&dirInode)
+		doneDirs[consider] = &dirInode
+
+		parentInode := s.inodes[doneDirs[parent].id]
 
 		newEntry := fuseutil.Dirent{
-			Offset: fuseops.DirOffset(len(parentInode.entries) + 1),
-			Inode:  fIn,
-			Name:   fileName,
+			Offset: fuseops.DirOffset(len(parentInode.entries) + 1), // #nosec G115
+			Inode:  dIn,
+			Name:   split[i-1],
 		}
 
 		parentInode.entries = append(parentInode.entries, newEntry)
 
+		parent = consider
 	}
 
-	return nil
+	// The directory structure should exist now
+
+	mtime, err := time.Parse(time.RFC3339, entry.LastModified)
+	if err != nil {
+		log.Printf("Error while decoding modified for %s timestamp %s : %v",
+			entry.FileID, entry.LastModified, err)
+	}
+	ctime, err := time.Parse(time.RFC3339, entry.CreatedAt)
+	if err != nil {
+		log.Printf("Error while decoding created for %s timestamp %s: %v",
+			entry.FileID, entry.CreatedAt, err)
+	}
+
+	dirName := filepath.Join(split[:len(split)-1]...)
+
+	fInode := inode{
+		attr: fuseops.InodeAttributes{
+			Nlink: 1,
+			Uid:   s.Owner,
+			Gid:   s.Group,
+			Mtime: mtime,
+			Ctime: ctime,
+			Atime: mtime,
+			Mode:  s.FilePerms,
+			Size:  entry.DecryptedFileSize,
+		},
+		dir:         false,
+		dataset:     dataSetName,
+		key:         entry.FilePath,
+		fileSize:    entry.DecryptedFileSize,
+		rawFileSize: entry.FileSize,
+	}
+	fIn := s.addInode(&fInode)
+
+	parentInode := s.inodes[doneDirs[dirName].id]
+
+	newEntry := fuseutil.Dirent{
+		Offset: fuseops.DirOffset(len(parentInode.entries) + 1), // #nosec G115
+		Inode:  fIn,
+		Name:   entry.strippedName,
+	}
+
+	parentInode.entries = append(parentInode.entries, newEntry)
+
 }
 
 func idToNum(s string) uint32 {
@@ -492,7 +509,7 @@ func idToNum(s string) uint32 {
 		return 0
 	}
 
-	return uint32(n)
+	return uint32(n) // #nosec G115
 }
 
 // setup makes various initialisations
@@ -500,26 +517,28 @@ func (s *SDAfs) setup() error {
 	//
 
 	if s.conf == nil {
-		return fmt.Errorf("No configuration specified")
+		return fmt.Errorf("no configuration specified")
 	}
 
 	currentUser, err := user.Current()
+	s.runAs = idToNum(currentUser.Uid)
+
 	if err == nil {
 		s.Owner = idToNum(currentUser.Uid)
 		s.Group = idToNum(currentUser.Gid)
 	}
 
-	if s.conf.SpecifyUid {
-		s.Owner = s.conf.Uid
+	if s.conf.SpecifyUID {
+		s.Owner = s.conf.UID
 	}
 
-	if s.conf.SpecifyGid {
-		s.Group = s.conf.Gid
+	if s.conf.SpecifyGID {
+		s.Group = s.conf.GID
 	}
 
 	//
-	if s.conf.HttpClient != nil {
-		s.client = s.conf.HttpClient
+	if s.conf.HTTPClient != nil {
+		s.client = s.conf.HTTPClient
 	} else {
 		transport := http.Transport{IdleConnTimeout: 1800 * time.Second}
 		s.client = &http.Client{Transport: &transport}
@@ -542,7 +561,7 @@ func (s *SDAfs) setup() error {
 	publicKey, privateKey, err := keys.GenerateKeyPair()
 
 	if err != nil {
-		return fmt.Errorf("Undexpected error while generating c4gh keypair: %v",
+		return fmt.Errorf("unexpected error while generating c4gh keypair: %v",
 			err)
 	}
 	s.privateC4GHkey = privateKey
@@ -551,7 +570,7 @@ func (s *SDAfs) setup() error {
 	err = keys.WriteCrypt4GHX25519PublicKey(w, publicKey)
 
 	if err != nil {
-		return fmt.Errorf("Error when writing public key: %v", err)
+		return fmt.Errorf("error when writing public key: %v", err)
 	}
 
 	publicKeyEncoded := base64.StdEncoding.EncodeToString(w.Bytes())
@@ -567,13 +586,13 @@ func (s *SDAfs) VerifyCredentials() error {
 
 	err := s.readToken()
 	if err != nil {
-		return fmt.Errorf("Error while getting token: %v",
+		return fmt.Errorf("error while getting token: %v",
 			err)
 	}
 
 	err = s.getDatasets()
 	if err != nil {
-		return fmt.Errorf("Error while getting datasets: %v",
+		return fmt.Errorf("error while getting datasets: %v",
 			err)
 	}
 
@@ -583,6 +602,15 @@ func (s *SDAfs) VerifyCredentials() error {
 
 // checkPerms verifies that the operation
 func (s *SDAfs) checkPerms(o *fuseops.OpContext) error {
+	if s.runAs == o.Uid {
+		return nil
+	}
+
+	// TODO: Simplified check here is enough?
+	if s.FilePerms == os.FileMode(0400) {
+		return fuse.EIO
+	}
+
 	return nil
 
 	// return fuse.EINVAL?
@@ -590,7 +618,7 @@ func (s *SDAfs) checkPerms(o *fuseops.OpContext) error {
 
 // GetInodeAttributes fills in the required attributes for the given inode
 func (s *SDAfs) GetInodeAttributes(
-	ctx context.Context,
+	_ context.Context,
 	op *fuseops.GetInodeAttributesOp) error {
 
 	in, ok := s.inodes[op.Inode]
@@ -615,7 +643,7 @@ func (s *SDAfs) checkLoaded(i *inode) error {
 	// Check if we're already loading this and fail if we're doing that.
 	if slices.Contains(s.loading, i.dataset) {
 		s.maplock.Unlock()
-		return fmt.Errorf("Already in the process of loading %s", i.dataset)
+		return fmt.Errorf("already in the process of loading %s", i.dataset)
 	}
 
 	s.loading = append(s.loading, i.dataset)
@@ -626,7 +654,7 @@ func (s *SDAfs) checkLoaded(i *inode) error {
 	err := s.loadDataset(i.dataset)
 	if err != nil {
 		// log.Printf("Couldn't load dataset %s: %v", i.dataset, err)
-		return fmt.Errorf("Couldn't load dataset %s: %v", i.dataset, err)
+		return fmt.Errorf("couldn't load dataset %s: %v", i.dataset, err)
 	}
 	i.loaded = true
 	s.maplock.Lock()
@@ -637,7 +665,7 @@ func (s *SDAfs) checkLoaded(i *inode) error {
 }
 
 func (s *SDAfs) LookUpInode(
-	ctx context.Context,
+	_ context.Context,
 	op *fuseops.LookUpInodeOp) error {
 
 	parent, ok := s.inodes[op.Parent]
@@ -676,7 +704,7 @@ func (s *SDAfs) LookUpInode(
 }
 
 func (s *SDAfs) StatFS(
-	ctx context.Context,
+	_ context.Context,
 	op *fuseops.StatFSOp) error {
 	// TODO: Should we fill this in better?
 
@@ -687,7 +715,7 @@ func (s *SDAfs) StatFS(
 
 // OpenFile provides open(2)
 func (s *SDAfs) OpenFile(
-	ctx context.Context,
+	_ context.Context,
 	op *fuseops.OpenFileOp) error {
 
 	err := s.checkPerms(&op.OpContext)
@@ -704,7 +732,7 @@ func (s *SDAfs) OpenFile(
 		return fuse.EINVAL
 	}
 
-	r, err := httpreader.NewHttpReader(s.getFileURL(in), s.token, s.getTotalSize(in), s.client, &s.keyHeader)
+	r, err := httpreader.NewHTTPReader(s.getFileURL(in), s.token, s.getTotalSize(in), s.client, &s.keyHeader)
 	if err != nil {
 		log.Printf("openfile failed: reader for %s gave: %v", in.key, err)
 		return fuse.EIO
@@ -722,31 +750,63 @@ func (s *SDAfs) OpenFile(
 		inodeReader = c4ghr
 	}
 
-	// Note: HttpReader supports Close but doesn't really care for it so
+	// Note: HTTPReader supports Close but doesn't really care for it so
 	// we don't go through the trouble of closing it at the end if we're doing
 	// crypt4gh
 
 	s.maplock.Lock()
-	id := s.getNewIdLocked()
+	defer s.maplock.Unlock()
+
+	id, err := s.getNewIDLocked()
+
+	if err != nil {
+		return fmt.Errorf("error while getting new ID: %v", err)
+	}
+
 	s.handles[id] = inodeReader
 	op.Handle = id
-	s.maplock.Unlock()
 
 	return nil
 }
 
+func getRandomID() (uint64, error) {
+	b := make([]byte, 8)
+	got, err := rand.Read(b)
+
+	if err != nil {
+		return 0, fmt.Errorf("error while reading random number: %v", err)
+	}
+
+	if got != 8 {
+		return 0, fmt.Errorf("got less data when expected - %d instead of 8",
+			got)
+	}
+
+	var v uint64
+	for _, c := range b {
+		v = v*256 + uint64(c)
+	}
+
+	return v, nil
+}
+
 // getNewIdLocked generates an id that isn't previously used
-func (s *SDAfs) getNewIdLocked() fuseops.HandleID {
+func (s *SDAfs) getNewIDLocked() (fuseops.HandleID, error) {
 	for {
-		id := fuseops.HandleID(rand.Uint64())
+		newID, err := getRandomID()
+		if err != nil {
+			return 0, fmt.Errorf("couldn't make random id: %v", err)
+		}
+
+		id := fuseops.HandleID(newID)
 		_, exist := s.handles[id]
 		if !exist {
-			return id
+			return id, nil
 		}
 	}
 }
 
-// getFileURL returns the path to use when requesting the HttpReader
+// getFileURL returns the path to use when requesting the HTTPReader
 func (s *SDAfs) getFileURL(i *inode) string {
 
 	u, err := url.JoinPath(s.conf.RootURL, "/s3-encrypted/", i.dataset, i.key)
@@ -760,10 +820,10 @@ func (s *SDAfs) getFileURL(i *inode) string {
 }
 
 // getTotalSize figures out the raw size of the object as presented
-func (s *SDAfs) getTotalSize(i *inode) int64 {
+func (s *SDAfs) getTotalSize(i *inode) uint64 {
 
 	if i.totalSize != 0 {
-		return int64(i.totalSize)
+		return i.totalSize
 	}
 
 	url, err := url.JoinPath("s3-encrypted", i.dataset, i.key)
@@ -780,11 +840,11 @@ func (s *SDAfs) getTotalSize(i *inode) int64 {
 
 	size := r.Header.Get("Content-Length")
 	if size != "" {
-		var rawSize int64
+		var rawSize uint64
 		n, err := fmt.Sscanf(size, "%d", &rawSize)
 
 		if err == nil && n == 1 {
-			i.totalSize = uint64(rawSize)
+			i.totalSize = rawSize
 			return rawSize
 		}
 	}
@@ -792,13 +852,13 @@ func (s *SDAfs) getTotalSize(i *inode) int64 {
 	// No content-length or issue decoding, check with server-additional-bytes
 	extra := r.Header.Get("Server-Additional-Bytes")
 	if extra != "" {
-		var extraBytes int64
+		var extraBytes uint64
 		n, err := fmt.Sscanf(extra, "%d", &extraBytes)
 
 		if err == nil && n == 1 {
-			i.totalSize = uint64(extraBytes) + i.rawFileSize
+			i.totalSize = extraBytes + i.rawFileSize
 
-			return extraBytes + int64(i.rawFileSize)
+			return extraBytes + i.rawFileSize
 		}
 	}
 
@@ -807,11 +867,11 @@ func (s *SDAfs) getTotalSize(i *inode) int64 {
 	log.Printf("HEAD didn't help for total size for %s, use default 124", url)
 	i.totalSize = 124 + i.rawFileSize
 
-	return 124 + int64(i.rawFileSize)
+	return 124 + i.rawFileSize
 }
 
 func (s *SDAfs) ReadFile(
-	ctx context.Context,
+	_ context.Context,
 	op *fuseops.ReadFileOp) error {
 
 	r, exist := s.handles[op.Handle]
@@ -821,7 +881,7 @@ func (s *SDAfs) ReadFile(
 	}
 
 	// r := *reader
-	pos, err := r.Seek(op.Offset, os.SEEK_SET)
+	pos, err := r.Seek(op.Offset, io.SeekStart)
 	if err != nil || pos != op.Offset {
 		return fuse.EIO
 	}
@@ -840,14 +900,14 @@ func (s *SDAfs) ReadFile(
 	return err
 }
 func (s *SDAfs) OpenDir(
-	ctx context.Context,
+	_ context.Context,
 	op *fuseops.OpenDirOp) error {
 
 	return s.checkPerms(&op.OpContext)
 }
 
 func (s *SDAfs) ReadDir(
-	ctx context.Context,
+	_ context.Context,
 	op *fuseops.ReadDirOp) error {
 
 	info, ok := s.inodes[op.Inode]

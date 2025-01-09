@@ -14,59 +14,59 @@ import (
 
 // TODO: Make something better that does TTLing
 
-var cache map[string][]HttpReaderCacheBlock
+var cache map[string][]CacheBlock
 var cacheLock sync.Mutex
-var prefetches map[string][]int64
+var prefetches map[string][]uint64
 var prefetchLock sync.Mutex
 
 var once sync.Once
 
-// HttpReaderCacheBlock is used to keep track of cached data
-type HttpReaderCacheBlock struct {
-	start  int64
-	length int64
+// CacheBlock is used to keep track of cached data
+type CacheBlock struct {
+	start  uint64
+	length uint64
 	data   []byte
 }
 
-func (r *HttpReader) initCache() {
+func (r *HTTPReader) initCache() {
 	once.Do(func() {
 		// Make the map if not done yet
-		cache = make(map[string][]HttpReaderCacheBlock)
-		prefetches = make(map[string][]int64)
+		cache = make(map[string][]CacheBlock)
+		prefetches = make(map[string][]uint64)
 
 	})
 
 	cacheLock.Lock()
 	_, found := cache[r.fileURL]
 	if !found {
-		cache[r.fileURL] = make([]HttpReaderCacheBlock, 0, 32)
+		cache[r.fileURL] = make([]CacheBlock, 0, 32)
 	}
 	cacheLock.Unlock()
 
 	prefetchLock.Lock()
 	_, found = prefetches[r.fileURL]
 	if !found {
-		prefetches[r.fileURL] = make([]int64, 0, 32)
+		prefetches[r.fileURL] = make([]uint64, 0, 32)
 	}
 	prefetchLock.Unlock()
 }
 
-// HttpReader is the vehicle to keep track of needed state for the reader
-type HttpReader struct {
+// HTTPReader is the vehicle to keep track of needed state for the reader
+type HTTPReader struct {
 	client        *http.Client
-	currentOffset int64
+	currentOffset uint64
 
 	fileURL      string
-	objectSize   int64
+	objectSize   uint64
 	lock         sync.Mutex
 	token        string
 	extraHeaders *http.Header
 }
 
-func NewHttpReader(fileURL, token string, objectSize int64, client *http.Client, headers *http.Header) (*HttpReader, error) {
+func NewHTTPReader(fileURL, token string, objectSize uint64, client *http.Client, headers *http.Header) (*HTTPReader, error) {
 
 	log.Printf("Creating reader for %v, object size %v", fileURL, objectSize)
-	reader := &HttpReader{
+	reader := &HTTPReader{
 		client,
 		0,
 		fileURL,
@@ -81,12 +81,12 @@ func NewHttpReader(fileURL, token string, objectSize int64, client *http.Client,
 	return reader, nil
 }
 
-func (r *HttpReader) Close() (err error) {
+func (r *HTTPReader) Close() (err error) {
 
 	return nil
 }
 
-func (r *HttpReader) pruneCache() {
+func (r *HTTPReader) pruneCache() {
 	cacheLock.Lock()
 	defer cacheLock.Unlock()
 
@@ -100,12 +100,12 @@ func (r *HttpReader) pruneCache() {
 
 }
 
-func (r *HttpReader) prefetchSize() int64 {
+func (r *HTTPReader) prefetchSize() uint64 {
 
 	return 10 * 1024 * 1024 / 65536 * (65536 + 28)
 }
 
-func (r *HttpReader) doFetch(rangeSpec string) ([]byte, error) {
+func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 	useURL := r.fileURL
 
 	if rangeSpec != "" {
@@ -173,7 +173,7 @@ func (r *HttpReader) doFetch(rangeSpec string) ([]byte, error) {
 	return dat, err
 }
 
-func (r *HttpReader) isInCache(offset int64) bool {
+func (r *HTTPReader) isInCache(offset uint64) bool {
 	cacheLock.Lock()
 	defer cacheLock.Unlock()
 	// Check if we have the data in cache
@@ -187,7 +187,7 @@ func (r *HttpReader) isInCache(offset int64) bool {
 	return false
 }
 
-func (r *HttpReader) prefetchAt(offset int64) {
+func (r *HTTPReader) prefetchAt(offset uint64) {
 	r.pruneCache()
 
 	if offset >= r.objectSize {
@@ -220,59 +220,65 @@ func (r *HttpReader) prefetchAt(offset int64) {
 		return
 	}
 
-	r.addToCache(HttpReaderCacheBlock{offset, int64(len(prefetchedData)), prefetchedData})
+	r.addToCache(CacheBlock{offset, uint64(len(prefetchedData)), prefetchedData})
 }
 
-func (r *HttpReader) Seek(offset int64, whence int) (int64, error) {
+func (r *HTTPReader) Seek(offset int64, whence int) (int64, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
+	iCurrent := int64(r.currentOffset) // #nosec G115
 
 	switch whence {
 	case io.SeekStart:
 		if offset < 0 {
-			return r.currentOffset, fmt.Errorf("Invalid offset %v- can't be negative when seeking from start", offset)
+			return iCurrent, fmt.Errorf("Invalid offset %v- can't be negative when seeking from start", offset)
 		}
-		if offset > r.objectSize {
-			return r.currentOffset, fmt.Errorf("Invalid offset %v - beyond end of object (size %v)", offset, r.objectSize)
+		// #nosec G115
+		if offset > int64(r.objectSize) {
+			return iCurrent, fmt.Errorf("Invalid offset %v - beyond end of object (size %v)", offset, r.objectSize)
 		}
 
-		r.currentOffset = offset
+		r.currentOffset = uint64(offset)
 		go r.prefetchAt(r.currentOffset)
 
 		return offset, nil
 
 	case io.SeekCurrent:
-		if r.currentOffset+offset < 0 {
-			return r.currentOffset, fmt.Errorf("Invalid offset %v from %v would be be before start", offset, r.currentOffset)
+		if iCurrent+offset < 0 {
+			return iCurrent, fmt.Errorf("Invalid offset %v from %v would be be before start", offset, r.currentOffset)
 		}
-		if offset > r.objectSize {
-			return r.currentOffset, fmt.Errorf("Invalid offset - %v from %v would end up beyond of object %v", offset, r.currentOffset, r.objectSize)
+		// #nosec G115
+		if offset > int64(r.objectSize) {
+			return iCurrent, fmt.Errorf("Invalid offset - %v from %v would end up beyond of object %v", offset, r.currentOffset, r.objectSize)
 		}
 
-		r.currentOffset += offset
+		r.currentOffset = uint64(int64(r.currentOffset) + offset) // #nosec G115
 		go r.prefetchAt(r.currentOffset)
 
-		return r.currentOffset, nil
+		return int64(r.currentOffset), nil // #nosec G115
 
 	case io.SeekEnd:
-		if r.objectSize+offset < 0 {
-			return r.currentOffset, fmt.Errorf("Invalid offset %v from end in %v bytes object, would be before file start", offset, r.objectSize)
-		}
-		if r.objectSize+offset > r.objectSize {
-			return r.currentOffset, fmt.Errorf("Invalid offset %v from end in %v bytes object", offset, r.objectSize)
+		// #nosec G115
+		if int64(r.objectSize)+offset < 0 {
+			return iCurrent, fmt.Errorf("Invalid offset %v from end in %v bytes object, would be before file start", offset, r.objectSize)
 		}
 
-		r.currentOffset = r.objectSize + offset
+		// #nosec G115
+		if int64(r.objectSize)+offset > int64(r.objectSize) {
+			return iCurrent, fmt.Errorf("Invalid offset %v from end in %v bytes object", offset, r.objectSize)
+		}
+
+		r.currentOffset = uint64(int64(r.objectSize) + offset) // #nosec G115
 		go r.prefetchAt(r.currentOffset)
 
-		return r.currentOffset, nil
+		return int64(r.currentOffset), nil // #nosec G115
 	}
 
-	return r.currentOffset, fmt.Errorf("Bad whence")
+	return iCurrent, fmt.Errorf("Bad whence")
 }
 
 // addToCache adds a prefetch to the list of outstanding prefetches once it's no longer active
-func (r *HttpReader) addToCache(cacheBlock HttpReaderCacheBlock) {
+func (r *HTTPReader) addToCache(cacheBlock CacheBlock) {
 	cacheLock.Lock()
 	defer cacheLock.Unlock()
 
@@ -288,14 +294,14 @@ func (r *HttpReader) addToCache(cacheBlock HttpReaderCacheBlock) {
 }
 
 // addToOutstanding adds a prefetch to the list of outstanding prefetches once it's no longer active
-func (r *HttpReader) addToOutstanding(toAdd int64) {
+func (r *HTTPReader) addToOutstanding(toAdd uint64) {
 	prefetchLock.Lock()
 	prefetches[r.fileURL] = append(prefetches[r.fileURL], toAdd)
 	prefetchLock.Unlock()
 }
 
 // removeFromOutstanding removes a prefetch from the list of outstanding prefetches once it's no longer active
-func (r *HttpReader) removeFromOutstanding(toRemove int64) {
+func (r *HTTPReader) removeFromOutstanding(toRemove uint64) {
 	prefetchLock.Lock()
 	defer prefetchLock.Unlock()
 
@@ -325,7 +331,7 @@ func (r *HttpReader) removeFromOutstanding(toRemove int64) {
 }
 
 // isPrefetching checks if the data is already being fetched
-func (r *HttpReader) isPrefetching(offset int64) bool {
+func (r *HTTPReader) isPrefetching(offset uint64) bool {
 	prefetchLock.Lock()
 	defer prefetchLock.Unlock()
 
@@ -341,7 +347,7 @@ func (r *HttpReader) isPrefetching(offset int64) bool {
 	return false
 }
 
-func (r *HttpReader) doRequest() (*http.Response, error) {
+func (r *HTTPReader) doRequest() (*http.Response, error) {
 
 	req, err := http.NewRequest("GET", r.fileURL, nil)
 	if err != nil {
@@ -360,7 +366,7 @@ func (r *HttpReader) doRequest() (*http.Response, error) {
 	return r.client.Do(req)
 }
 
-func (r *HttpReader) Read(dst []byte) (n int, err error) {
+func (r *HTTPReader) Read(dst []byte) (n int, err error) {
 	r.lock.Lock()
 	start := r.currentOffset
 	r.lock.Unlock()
@@ -394,7 +400,7 @@ func (r *HttpReader) Read(dst []byte) (n int, err error) {
 
 				// Pull out wanted data (as much as we have)
 				n = copy(dst, p.data[offsetInBlock:])
-				r.currentOffset = start + int64(n)
+				r.currentOffset = start + uint64(n) // #nosec G115
 
 				// Prefetch the next bit
 				go r.prefetchAt(r.currentOffset)
@@ -423,13 +429,13 @@ func (r *HttpReader) Read(dst []byte) (n int, err error) {
 
 	// Add to cache
 	cacheBytes := bytes.Clone(data)
-	r.addToCache(HttpReaderCacheBlock{start, int64(len(cacheBytes)), cacheBytes})
+	r.addToCache(CacheBlock{start, uint64(len(cacheBytes)), cacheBytes})
 
 	b := bytes.NewBuffer(data)
 	n, err = b.Read(dst)
 
 	r.lock.Lock()
-	r.currentOffset = start + int64(n)
+	r.currentOffset = start + uint64(n) // #nosec G115
 	r.lock.Unlock()
 
 	go r.prefetchAt(r.currentOffset)

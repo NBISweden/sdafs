@@ -22,20 +22,27 @@ var VERSIONS = []string{"1.31.0"}
 
 func (d *Driver) registerKubelet() error {
 
-	// kubeletSocketPath := "unix:///var/lib/kubelet/plugins/kubelet.sock"
-	// if d.kubeletSocket != nil {
-	// 	kubeletSocketPath = *d.kubeletSocket
-	// }
+	opts := []grpc.ServerOption{}
+	csiServer := grpc.NewServer(opts...)
 
-	// if err != nil {
-	// 	return fmt.Errorf("Couldn't make kubelet grpc connection: %v", err)
-	// }
+	kubeletSocketPath := "unix:///var/lib/kubelet/plugins/kubelet.sock"
+	if d.kubeletSocket != nil {
+		kubeletSocketPath = *d.kubeletSocket
+	}
 
-	// klog.V(4).Infof("%v err %v", c, err)
+	endpointParts := strings.Split(kubeletSocketPath, ":")
+	listener, err := net.Listen(endpointParts[0], endpointParts[1])
 
-	// pr := pluginregistration.NewRegistrationClient(c)
-	// pr.GetInfo()
-	// pluginregistration.RegisterRegistrationServer()
+	if err != nil {
+		return fmt.Errorf("Error while setting up listen for grpc: %v", err)
+	}
+
+	go func() {
+		err := csiServer.Serve(listener)
+		if err != nil {
+			klog.Errorf("Serving of registration GRPC failed: %v", err)
+		}
+	}()
 
 	return nil
 }
@@ -44,14 +51,14 @@ type Driver struct {
 	csi.UnimplementedIdentityServer
 	csi.UnimplementedControllerServer
 	csi.UnimplementedNodeServer
-	endpoint, nodeId, kubeletSocket *string
+	endpoint, nodeID, kubeletSocket *string
 	server                          *grpc.Server
 }
 
-func NewDriver(endpoint, nodeId, kubeletSocket *string) *Driver {
+func NewDriver(endpoint, nodeID, kubeletSocket *string) *Driver {
 	return &Driver{
 		endpoint:      endpoint,
-		nodeId:        nodeId,
+		nodeID:        nodeID,
 		kubeletSocket: kubeletSocket,
 	}
 }
@@ -72,10 +79,10 @@ func (d *Driver) Run() error {
 
 	klog.V(4).Infof("Registering")
 
-	// err = d.registerKubelet()
-	// if err != nil {
-	// 	return fmt.Errorf("Error while registering with kubelet: %v", err)
-	// }
+	err = d.registerKubelet()
+	if err != nil {
+		return fmt.Errorf("Error while registering with kubelet: %v", err)
+	}
 
 	csi.RegisterIdentityServer(d.server, d)
 	csi.RegisterControllerServer(d.server, d)
@@ -109,14 +116,14 @@ func handleSignals(c chan os.Signal, l net.Listener) {
 }
 
 // Identity interface implementation
-func (d *Driver) GetPluginCapabilities(c context.Context, r *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse, error) {
+func (d *Driver) GetPluginCapabilities(_ context.Context, r *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse, error) {
 	klog.V(10).Infof("GetPluginCapabilities: request %v", r)
 	return &csi.GetPluginCapabilitiesResponse{
 		Capabilities: []*csi.PluginCapability{},
 	}, nil
 }
 
-func (d *Driver) GetPluginInfo(c context.Context, r *csi.GetPluginInfoRequest) (*csi.GetPluginInfoResponse, error) {
+func (d *Driver) GetPluginInfo(_ context.Context, r *csi.GetPluginInfoRequest) (*csi.GetPluginInfoResponse, error) {
 	klog.V(10).Infof("GetPluginInfo: request %v", r)
 	return &csi.GetPluginInfoResponse{
 		Name:          "sdafs-csi",
@@ -129,34 +136,34 @@ func (d *Driver) driverReady() bool {
 	return true
 }
 
-func (d *Driver) Probe(c context.Context, r *csi.ProbeRequest) (*csi.ProbeResponse, error) {
+func (d *Driver) Probe(_ context.Context, r *csi.ProbeRequest) (*csi.ProbeResponse, error) {
 	klog.V(10).Infof("Probe: request %v", r)
 	return &csi.ProbeResponse{
 		Ready: wrapperspb.Bool(d.driverReady()),
 	}, nil
 }
 
-func (d *Driver) NodePublishVolume(c context.Context, r *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
+func (d *Driver) NodePublishVolume(_ context.Context, r *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
 	klog.V(10).Infof("NodePublishVolume: request %v", r)
 
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
-func (d *Driver) NodeUnpublishVolume(c context.Context, r *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
+func (d *Driver) NodeUnpublishVolume(_ context.Context, r *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
 	klog.V(10).Infof("NodeUnpublishVolume: request %v", r)
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
-func (d *Driver) NodeGetInfo(c context.Context, r *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
+func (d *Driver) NodeGetInfo(_ context.Context, r *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
 	klog.V(10).Infof("NodeGetInfo: request %v", r)
 
 	return &csi.NodeGetInfoResponse{
-		NodeId: *d.nodeId,
+		NodeId: *d.nodeID,
 	}, nil
 }
 
-func (d *Driver) NodeGetCapabilities(c context.Context, r *csi.NodeGetCapabilitiesRequest) (*csi.NodeGetCapabilitiesResponse, error) {
+func (d *Driver) NodeGetCapabilities(_ context.Context, r *csi.NodeGetCapabilitiesRequest) (*csi.NodeGetCapabilitiesResponse, error) {
 	klog.V(10).Infof("NodeGetCapabilities: request %v", r)
 
 	return &csi.NodeGetCapabilitiesResponse{
@@ -165,7 +172,7 @@ func (d *Driver) NodeGetCapabilities(c context.Context, r *csi.NodeGetCapabiliti
 }
 
 // GetInfo is the RPC invoked by plugin watcher
-func (d *Driver) GetInfo(ctx context.Context, r *pluginregistration.InfoRequest) (*pluginregistration.PluginInfo, error) {
+func (d *Driver) GetInfo(_ context.Context, r *pluginregistration.InfoRequest) (*pluginregistration.PluginInfo, error) {
 	klog.V(10).Infof("GetInfo: request %v", r)
 
 	return &pluginregistration.PluginInfo{
@@ -176,7 +183,7 @@ func (d *Driver) GetInfo(ctx context.Context, r *pluginregistration.InfoRequest)
 	}, nil
 }
 
-func (d *Driver) NotifyRegistrationStatus(c context.Context, r *pluginregistration.RegistrationStatus) (*pluginregistration.RegistrationStatusResponse, error) {
+func (d *Driver) NotifyRegistrationStatus(_ context.Context, r *pluginregistration.RegistrationStatus) (*pluginregistration.RegistrationStatusResponse, error) {
 	klog.V(10).Infof("GetInfo: request %v", r)
 
 	if !r.PluginRegistered {

@@ -14,7 +14,7 @@ func usage() {
 		"Usage: %s [FLAGS...] mountpoint\n\nSupported flags are:\n\n",
 		os.Args[0])
 	flag.PrintDefaults()
-	os.Exit(1)
+	os.Exit(0)
 }
 
 func main() {
@@ -25,26 +25,32 @@ func main() {
 		endpointDefault = "unix://tmp/csi.sock"
 	}
 
-	nodeIdDefault := os.Getenv("CSI_NODE_ID")
-	if nodeIdDefault == "" {
-		nodeIdDefault = "nodeid"
+	nodeIDDefault := os.Getenv("CSI_NODE_ID")
+	if nodeIDDefault == "" {
+		nodeIDDefault = "nodeid"
 	}
 
 	kubeletEndpointDefault := "unix:///var/lib/kubelet/device-plugin/kubelet.sock"
 
+	help := flag.Bool("help", false, "Show usage")
+
 	endpoint := flag.String("endpoint", endpointDefault, "CSI Endpoint")
-	nodeId := flag.String("node-id", nodeIdDefault,
+	nodeID := flag.String("node-id", nodeIDDefault,
 		"node-id to report in NodeGetInfo RPC")
 	kubeletEndpoint := flag.String("kubeletendpoint", kubeletEndpointDefault,
 		"Kubelet device plugin registration socket")
 
 	flag.Parse()
 
+	if *help {
+		usage()
+	}
+
 	klog.V(3).Infof(
 		"Configuration: CSI Endpoint: %s, NodeId: %s, Kubelet socket: %s",
-		*endpoint, *nodeId, *kubeletEndpoint)
+		*endpoint, *nodeID, *kubeletEndpoint)
 
-	d := csidriver.NewDriver(endpoint, nodeId, kubeletEndpoint)
+	d := csidriver.NewDriver(endpoint, nodeID, kubeletEndpoint)
 	err := d.Run()
 	klog.V(0).Infof("CSI driver run failed: %v", err)
 
