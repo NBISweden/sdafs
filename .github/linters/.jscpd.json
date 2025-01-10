@@ -1,7 +1,3 @@
 {
- 
-    "ignore": [
-        "**/.goreleaser.yaml"
-    ]
-} 
- 
+  "ignore": ["**/.goreleaser.yaml"]
+}
