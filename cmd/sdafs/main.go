@@ -112,6 +112,19 @@ func detachIfNeeded(c mainConfig) {
 	}
 }
 
+func checkMountDir(m mainConfig) {
+	st, err := os.Stat(m.mountPoint)
+
+	if err != nil {
+		log.Fatalf("Error while checking desired mount point %s: %v",
+			m.mountPoint, err)
+	}
+
+	if !st.IsDir() {
+		log.Fatalf("Error while checking mount point %s: not a directory", m.mountPoint)
+	}
+}
+
 func main() {
 	c := getConfigs()
 	mountConfig := &fuse.MountConfig{
@@ -122,13 +135,15 @@ func main() {
 		VolumeName:                fmt.Sprintf("SDA mount of %s", c.sdafsconf.RootURL),
 	}
 
-	repointLog(c)
-	detachIfNeeded(c)
+	checkMountDir(c)
 
 	fs, err := sdafs.NewSDAfs(c.sdafsconf)
 	if err != nil {
 		log.Fatalf("Error while creating sda fs: %v", err)
 	}
+
+	repointLog(c)
+	detachIfNeeded(c)
 
 	mount, err := fuse.Mount(c.mountPoint, fs.GetFileSystemServer(), mountConfig)
 	if err != nil {
