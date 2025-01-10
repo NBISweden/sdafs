@@ -606,7 +606,7 @@ func (s *SDAfs) checkPerms(o *fuseops.OpContext) error {
 	}
 
 	// TODO: Simplified check here is enough?
-	if s.FilePerms&4 == 4 {
+	if s.FilePerms&4 == 0 {
 		return fuse.EIO
 	}
 
