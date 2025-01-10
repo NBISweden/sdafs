@@ -345,7 +345,7 @@ func (s *SDAfs) loadDataset(dataSetName string) error {
 	doneDirs := make(map[string]*inode)
 	doneDirs[""] = s.inodes[datasetBase.id]
 
-	s.trimNames(&contents)
+	s.trimNames(contents)
 
 	for _, entry := range contents {
 		s.attachSDAObject(doneDirs, entry, dataSetName)
@@ -354,9 +354,8 @@ func (s *SDAfs) loadDataset(dataSetName string) error {
 	return nil
 }
 
-func (s *SDAfs) trimNames(contents *[]datasetFile) {
-
-	for _, entry := range *contents {
+func (s *SDAfs) trimNames(contents []datasetFile) {
+	for i, entry := range contents {
 
 		split := strings.Split(entry.FilePath, "/")
 		fileName := split[len(split)-1]
@@ -370,7 +369,7 @@ func (s *SDAfs) trimNames(contents *[]datasetFile) {
 			// by stripping
 
 			found := false
-			for _, p := range *contents {
+			for _, p := range contents {
 				if p.FilePath == strippedFull {
 					found = true
 					break
@@ -383,11 +382,11 @@ func (s *SDAfs) trimNames(contents *[]datasetFile) {
 			}
 		}
 
-		entry.strippedName = fileName
+		(contents)[i].strippedName = fileName
 	}
 }
 
-func (s *SDAfs) attachSDAObject(doneDirs map[string]*inode,
+func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 	entry datasetFile,
 	dataSetName string) {
 	if entry.FileStatus != "ready" {
@@ -411,7 +410,7 @@ func (s *SDAfs) attachSDAObject(doneDirs map[string]*inode,
 	for i := 1; i < len(split); i++ {
 		consider := filepath.Join(split[:i]...)
 
-		_, found := doneDirs[consider]
+		_, found := dirs[consider]
 
 		if found {
 			// Already "created" the directory for this entry
@@ -439,9 +438,9 @@ func (s *SDAfs) attachSDAObject(doneDirs map[string]*inode,
 		}
 
 		dIn := s.addInode(&dirInode)
-		doneDirs[consider] = &dirInode
+		dirs[consider] = &dirInode
 
-		parentInode := s.inodes[doneDirs[parent].id]
+		parentInode := s.inodes[dirs[parent].id]
 
 		newEntry := fuseutil.Dirent{
 			Offset: fuseops.DirOffset(len(parentInode.entries) + 1), // #nosec G115
@@ -488,7 +487,7 @@ func (s *SDAfs) attachSDAObject(doneDirs map[string]*inode,
 	}
 	fIn := s.addInode(&fInode)
 
-	parentInode := s.inodes[doneDirs[dirName].id]
+	parentInode := s.inodes[dirs[dirName].id]
 
 	newEntry := fuseutil.Dirent{
 		Offset: fuseops.DirOffset(len(parentInode.entries) + 1), // #nosec G115
@@ -607,7 +606,7 @@ func (s *SDAfs) checkPerms(o *fuseops.OpContext) error {
 	}
 
 	// TODO: Simplified check here is enough?
-	if s.FilePerms == os.FileMode(0400) {
+	if s.FilePerms&4 == 4 {
 		return fuse.EIO
 	}
 
@@ -675,7 +674,9 @@ func (s *SDAfs) LookUpInode(
 
 	if parent.key == "/" {
 		err := s.checkLoaded(parent)
+
 		if err != nil {
+			log.Printf("Returning eio from LookUpInode")
 			return fuse.EIO
 		}
 	}
@@ -720,21 +721,26 @@ func (s *SDAfs) OpenFile(
 
 	err := s.checkPerms(&op.OpContext)
 	if err != nil {
+		log.Printf("OpenFile err: %v", err)
+
 		return err
 	}
 
 	in, found := s.inodes[op.Inode]
 	if !found {
+		log.Printf("OpenFile of non-existent file")
+
 		return fuse.EEXIST
 	}
 
 	if in.dir {
+		log.Printf("OpenFile of directory")
 		return fuse.EINVAL
 	}
 
 	r, err := httpreader.NewHTTPReader(s.getFileURL(in), s.token, s.getTotalSize(in), s.client, &s.keyHeader)
 	if err != nil {
-		log.Printf("openfile failed: reader for %s gave: %v", in.key, err)
+		log.Printf("OpenFile failed: reader for %s gave: %v", in.key, err)
 		return fuse.EIO
 	}
 
@@ -745,7 +751,7 @@ func (s *SDAfs) OpenFile(
 	if err != nil {
 		// Assume we are served non-encrypted content
 		inodeReader = r
-		log.Printf("Opening of %s as crypt4gh failed: %v", in.key, err)
+		log.Printf("OpenFile of %s as crypt4gh failed: %v", in.key, err)
 	} else {
 		inodeReader = c4ghr
 	}
@@ -760,6 +766,7 @@ func (s *SDAfs) OpenFile(
 	id, err := s.getNewIDLocked()
 
 	if err != nil {
+		log.Printf("OpenFile error: %v", err)
 		return fmt.Errorf("error while getting new ID: %v", err)
 	}
 
@@ -877,12 +884,13 @@ func (s *SDAfs) ReadFile(
 	r, exist := s.handles[op.Handle]
 
 	if !exist {
+		log.Printf("ReadFile for something that doesn't exist")
 		return fuse.EIO
 	}
 
-	// r := *reader
 	pos, err := r.Seek(op.Offset, io.SeekStart)
 	if err != nil || pos != op.Offset {
+		log.Printf("Seek failed or didn't return expected result: %v", err)
 		return fuse.EIO
 	}
 
@@ -903,6 +911,7 @@ func (s *SDAfs) OpenDir(
 	_ context.Context,
 	op *fuseops.OpenDirOp) error {
 
+	// Just check if access is allowed
 	return s.checkPerms(&op.OpContext)
 }
 
@@ -912,16 +921,21 @@ func (s *SDAfs) ReadDir(
 
 	info, ok := s.inodes[op.Inode]
 	if !ok {
+		log.Printf("ReadDir called for unexistant directory, " +
+			"this shouldn't happen")
 		return fuse.ENOENT
 	}
 
 	if !info.dir {
+		log.Printf("ReadDir for something not a directory")
 		return fuse.EIO
 	}
 
 	if info.key == "/" {
 		err := s.checkLoaded(info)
 		if err != nil {
+			log.Printf("ReadDir failed loading dataset %s: %v",
+				info.dataset, err)
 			return fuse.EIO
 		}
 	}
