@@ -27,8 +27,25 @@ builds:
     ldflags:
       - -s -w -X main.Version={{ .Tag }}
 archives:
-  - name_template: >-
-      {{ .ProjectName }}_
+  - id: sdafs
+    builds:
+      - sdafs
+    name_template: >-
+      sdafs_
+      {{ .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
+  - id: csi-driver
+    builds:
+      - csi-driver
+    name_template: >-
+      csi-driver_
       {{ .Version }}_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
