@@ -48,4 +48,9 @@ directory unless overridden when running in the background). Alternatively,
 
 By default, `sdafs` will not allow access from other users. For use cases where
 that is not enough (e.g. running some tool in a container solution), the flag
-`--open` will allow access from all users.
+`--open` will allow access from all users. This may possibly be needed for use
+with e.g. docker.
+
+Using open may require a more liberal configuration for fuse than some systems
+have as default (in particular, it's likely to require `user_allow_other` being
+allowed in `/etc/fuse.conf`, which likely require root privileges to change).

@@ -29,6 +29,7 @@ type mainConfig struct {
 	foreground bool
 	logFile    string
 	sdafsconf  *sdafs.Conf
+	open       bool
 }
 
 func getConfigs() mainConfig {
@@ -75,6 +76,7 @@ func getConfigs() mainConfig {
 		sdafsconf:  &conf,
 		foreground: foreground,
 		logFile:    useLogFile,
+		open:       open,
 	}
 
 	return m
@@ -133,6 +135,11 @@ func main() {
 		DisableDefaultPermissions: true,
 		FSName:                    fmt.Sprintf("SDA_%s", c.sdafsconf.RootURL),
 		VolumeName:                fmt.Sprintf("SDA mount of %s", c.sdafsconf.RootURL),
+	}
+
+	if c.open {
+		mountConfig.Options = make(map[string]string)
+		mountConfig.Options["allow_other"] = ""
 	}
 
 	checkMountDir(c)
