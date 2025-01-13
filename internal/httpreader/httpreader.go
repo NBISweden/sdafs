@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -61,19 +62,30 @@ type HTTPReader struct {
 	lock         sync.Mutex
 	token        string
 	extraHeaders *http.Header
+
+	maxRetries int
 }
 
-func NewHTTPReader(fileURL, token string, objectSize uint64, client *http.Client, headers *http.Header) (*HTTPReader, error) {
+func NewHTTPReader(fileURL, token string,
+	objectSize uint64,
+	client *http.Client,
+	headers *http.Header,
+	maxRetries int) (*HTTPReader, error) {
+
+	if maxRetries == 0 {
+		maxRetries = 6
+	}
 
 	log.Printf("Creating reader for %v, object size %v", fileURL, objectSize)
 	reader := &HTTPReader{
-		client,
-		0,
-		fileURL,
-		objectSize,
-		sync.Mutex{},
-		token,
-		headers,
+		client:        client,
+		currentOffset: 0,
+		fileURL:       fileURL,
+		objectSize:    objectSize,
+		lock:          sync.Mutex{},
+		token:         token,
+		extraHeaders:  headers,
+		maxRetries:    maxRetries,
 	}
 
 	reader.initCache()
@@ -137,6 +149,10 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", r.token))
 
+	if rangeSpec != "" {
+		req.Header.Add("Range", rangeSpec)
+	}
+
 	if r.extraHeaders != nil {
 		for h := range *r.extraHeaders {
 			req.Header.Add(h, r.extraHeaders.Get(h))
@@ -187,7 +203,11 @@ func (r *HTTPReader) isInCache(offset uint64) bool {
 	return false
 }
 
-func (r *HTTPReader) prefetchAt(offset uint64) {
+func (r *HTTPReader) prefetchAt(waitBefore time.Duration, offset uint64) {
+	if waitBefore.Seconds() > 0 {
+		time.Sleep(waitBefore)
+	}
+
 	r.pruneCache()
 
 	if offset >= r.objectSize {
@@ -217,6 +237,17 @@ func (r *HTTPReader) prefetchAt(offset uint64) {
 	r.removeFromOutstanding(offset)
 
 	if err != nil {
+
+		if waitBefore == 0*time.Second {
+			waitBefore = 1
+		} else {
+			waitBefore = 2 * waitBefore
+		}
+
+		if waitBefore < time.Duration(math.Pow(2, float64(r.maxRetries)))*time.Second {
+			r.prefetchAt(waitBefore, offset)
+		}
+
 		return
 	}
 
@@ -239,7 +270,7 @@ func (r *HTTPReader) Seek(offset int64, whence int) (int64, error) {
 		}
 
 		r.currentOffset = uint64(offset)
-		go r.prefetchAt(r.currentOffset)
+		go r.prefetchAt(0*time.Second, r.currentOffset)
 
 		return offset, nil
 
@@ -253,7 +284,7 @@ func (r *HTTPReader) Seek(offset int64, whence int) (int64, error) {
 		}
 
 		r.currentOffset = uint64(int64(r.currentOffset) + offset) // #nosec G115
-		go r.prefetchAt(r.currentOffset)
+		go r.prefetchAt(0*time.Second, r.currentOffset)
 
 		return int64(r.currentOffset), nil // #nosec G115
 
@@ -269,7 +300,7 @@ func (r *HTTPReader) Seek(offset int64, whence int) (int64, error) {
 		}
 
 		r.currentOffset = uint64(int64(r.objectSize) + offset) // #nosec G115
-		go r.prefetchAt(r.currentOffset)
+		go r.prefetchAt(0*time.Second, r.currentOffset)
 
 		return int64(r.currentOffset), nil // #nosec G115
 	}
@@ -403,7 +434,7 @@ func (r *HTTPReader) Read(dst []byte) (n int, err error) {
 				r.currentOffset = start + uint64(n) // #nosec G115
 
 				// Prefetch the next bit
-				go r.prefetchAt(r.currentOffset)
+				go r.prefetchAt(0*time.Second, r.currentOffset)
 
 				return n, nil
 			}
@@ -417,11 +448,19 @@ func (r *HTTPReader) Read(dst []byte) (n int, err error) {
 	// Not found in cache, need to fetch data
 	wantedRange := fmt.Sprintf("bytes=%d-%d", r.currentOffset, min(r.currentOffset+r.prefetchSize()-1, r.objectSize-1))
 
-	r.addToOutstanding(start)
+	var data []byte
+	var wait time.Duration = 1
+	for tries := 0; tries <= r.maxRetries; tries++ {
+		r.addToOutstanding(start)
+		data, err = r.doFetch(wantedRange)
+		r.removeFromOutstanding(start)
 
-	data, err := r.doFetch(wantedRange)
-
-	r.removeFromOutstanding(start)
+		if err != nil {
+			// Something went wrong, wait and retry
+			time.Sleep(wait * time.Second)
+			wait *= 2
+		}
+	}
 
 	if err != nil {
 		return 0, err
@@ -438,7 +477,7 @@ func (r *HTTPReader) Read(dst []byte) (n int, err error) {
 	r.currentOffset = start + uint64(n) // #nosec G115
 	r.lock.Unlock()
 
-	go r.prefetchAt(r.currentOffset)
+	go r.prefetchAt(0*time.Second, r.currentOffset)
 
 	return n, err
 }
