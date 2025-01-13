@@ -16,11 +16,15 @@ import (
 var credentialsFile, rootURL, logFile string
 var foreground, open bool
 
+var Version string = "development"
+
+// usage prints usage and version for the benefit of the user
 func usage() {
 	fmt.Fprintf(flag.CommandLine.Output(),
 		"Usage: %s [FLAGS...] mountpoint\n\nSupported flags are:\n\n",
 		os.Args[0])
 	flag.PrintDefaults()
+	fmt.Printf("\nsdafs version: %s\n\n", Version)
 	os.Exit(1)
 }
 
