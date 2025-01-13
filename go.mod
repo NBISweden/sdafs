@@ -6,11 +6,11 @@ require (
 	github.com/container-storage-interface/spec v1.11.0
 	github.com/jacobsa/fuse v0.0.0-20241025064006-8ccd61173b05
 	github.com/jarcoal/httpmock v1.3.1
-	github.com/neicnordic/crypt4gh v1.12.0
+	github.com/neicnordic/crypt4gh v1.13.0
 	github.com/sevlyar/go-daemon v0.1.6
 	github.com/stretchr/testify v1.10.0
 	github.com/tj/assert v0.0.3
-	google.golang.org/grpc v1.69.2
+	google.golang.org/grpc v1.69.4
 	google.golang.org/protobuf v1.36.2
 	gopkg.in/ini.v1 v1.67.0
 	k8s.io/klog/v2 v2.130.1
