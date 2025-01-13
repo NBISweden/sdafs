@@ -15,6 +15,7 @@ import (
 
 var credentialsFile, rootURL, logFile string
 var foreground, open bool
+var maxRetries int
 
 var Version string = "development"
 
@@ -28,6 +29,7 @@ func usage() {
 	os.Exit(1)
 }
 
+// mainConfig holds the configuration
 type mainConfig struct {
 	mountPoint string
 	foreground bool
@@ -36,6 +38,8 @@ type mainConfig struct {
 	open       bool
 }
 
+// mainConfig makes the configuration structure from whatever sources applies
+// (currently command line flags only)
 func getConfigs() mainConfig {
 	home := os.Getenv("HOME")
 
@@ -45,7 +49,8 @@ func getConfigs() mainConfig {
 	flag.StringVar(&logFile, "log", "", "File to send logs to instead of stderr,"+
 		" defaults to sdafs.log if detached, empty string means stderr which is default for foreground")
 
-	flag.BoolVar(&foreground, "foreground", false, "Do not detach")
+	flag.IntVar(&maxRetries, "maxretries", 7, "Max number retries for failed transfers. Retries will be done with some form of backoff")
+	flag.BoolVar(&foreground, "foreground", false, "Do not detach, run in foreground and send log output to stdout")
 	flag.BoolVar(&open, "open", false, "Set permissions allowing access by others than the user")
 
 	flag.Parse()
@@ -86,6 +91,7 @@ func getConfigs() mainConfig {
 	return m
 }
 
+// repointLog switches where the log goes if needed
 func repointLog(m mainConfig) {
 	if m.logFile != "" {
 		f, err := os.OpenFile(m.logFile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
@@ -99,6 +105,7 @@ func repointLog(m mainConfig) {
 	}
 }
 
+// detachIfNeeded daemonizes if needed
 func detachIfNeeded(c mainConfig) {
 	if !c.foreground {
 		context := new(daemon.Context)
