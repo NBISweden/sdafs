@@ -70,6 +70,7 @@ type Conf struct {
 	DirPerms         os.FileMode
 	FilePerms        os.FileMode
 	HTTPClient       *http.Client
+	ChunkSize        int
 }
 
 // inode is the struct to manage a directory entry
@@ -740,7 +741,16 @@ func (s *SDAfs) OpenFile(
 		return fuse.EINVAL
 	}
 
-	r, err := httpreader.NewHTTPReader(s.getFileURL(in), s.token, s.getTotalSize(in), s.client, &s.keyHeader, s.conf.MaxRetries)
+	conf := httpreader.Conf{
+		Token:      s.token,
+		Client:     s.client,
+		Headers:    &s.keyHeader,
+		MaxRetries: s.conf.MaxRetries,
+		ChunkSize:  s.conf.ChunkSize,
+	}
+	r, err := httpreader.NewHTTPReader(&conf,
+		&httpreader.Request{FileURL: s.getFileURL(in),
+			ObjectSize: s.getTotalSize(in)})
 	if err != nil {
 		log.Printf("OpenFile failed: reader for %s gave: %v", in.key, err)
 		return fuse.EIO

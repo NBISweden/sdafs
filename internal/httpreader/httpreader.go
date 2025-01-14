@@ -13,6 +13,19 @@ import (
 	"time"
 )
 
+type Conf struct {
+	Token      string
+	Client     *http.Client
+	Headers    *http.Header
+	MaxRetries int
+	ChunkSize  int
+}
+
+type Request struct {
+	FileURL    string
+	ObjectSize uint64
+}
+
 // TODO: Make something better that does TTLing
 
 var cache map[string][]CacheBlock
@@ -54,38 +67,22 @@ func (r *HTTPReader) initCache() {
 
 // HTTPReader is the vehicle to keep track of needed state for the reader
 type HTTPReader struct {
-	client        *http.Client
+	conf          *Conf
 	currentOffset uint64
-
-	fileURL      string
-	objectSize   uint64
-	lock         sync.Mutex
-	token        string
-	extraHeaders *http.Header
-
-	maxRetries int
+	fileURL       string
+	objectSize    uint64
+	lock          sync.Mutex
 }
 
-func NewHTTPReader(fileURL, token string,
-	objectSize uint64,
-	client *http.Client,
-	headers *http.Header,
-	maxRetries int) (*HTTPReader, error) {
+func NewHTTPReader(conf *Conf, request *Request,
+) (*HTTPReader, error) {
 
-	if maxRetries == 0 {
-		maxRetries = 6
-	}
-
-	log.Printf("Creating reader for %v, object size %v", fileURL, objectSize)
+	log.Printf("Creating reader for %v, object size %v", request.FileURL, request.ObjectSize)
 	reader := &HTTPReader{
-		client:        client,
-		currentOffset: 0,
-		fileURL:       fileURL,
-		objectSize:    objectSize,
-		lock:          sync.Mutex{},
-		token:         token,
-		extraHeaders:  headers,
-		maxRetries:    maxRetries,
+		conf:       conf,
+		fileURL:    request.FileURL,
+		objectSize: request.ObjectSize,
+		lock:       sync.Mutex{},
 	}
 
 	reader.initCache()
@@ -147,19 +144,19 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 			r.fileURL, err)
 	}
 
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", r.token))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", r.conf.Token))
 
 	if rangeSpec != "" {
 		req.Header.Add("Range", rangeSpec)
 	}
 
-	if r.extraHeaders != nil {
-		for h := range *r.extraHeaders {
-			req.Header.Add(h, r.extraHeaders.Get(h))
+	if r.conf.Headers != nil {
+		for h := range *r.conf.Headers {
+			req.Header.Add(h, r.conf.Headers.Get(h))
 		}
 	}
 
-	resp, err := r.client.Do(req)
+	resp, err := r.conf.Client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"Error while making request for %s: %v",
@@ -244,7 +241,7 @@ func (r *HTTPReader) prefetchAt(waitBefore time.Duration, offset uint64) {
 			waitBefore = 2 * waitBefore
 		}
 
-		if waitBefore < time.Duration(math.Pow(2, float64(r.maxRetries)))*time.Second {
+		if waitBefore < time.Duration(math.Pow(2, float64(r.conf.MaxRetries)))*time.Second {
 			r.prefetchAt(waitBefore, offset)
 		}
 
@@ -387,14 +384,14 @@ func (r *HTTPReader) doRequest() (*http.Response, error) {
 			r.fileURL, err)
 	}
 
-	if r.extraHeaders != nil {
-		for h := range *r.extraHeaders {
-			req.Header.Add(h, r.extraHeaders.Get(h))
+	if r.conf.Headers != nil {
+		for h := range *r.conf.Headers {
+			req.Header.Add(h, r.conf.Headers.Get(h))
 		}
 	}
 
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", r.token))
-	return r.client.Do(req)
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", r.conf.Token))
+	return r.conf.Client.Do(req)
 }
 
 func (r *HTTPReader) Read(dst []byte) (n int, err error) {
@@ -450,7 +447,7 @@ func (r *HTTPReader) Read(dst []byte) (n int, err error) {
 
 	var data []byte
 	var wait time.Duration = 1
-	for tries := 0; tries <= r.maxRetries; tries++ {
+	for tries := 0; tries <= r.conf.MaxRetries; tries++ {
 		r.addToOutstanding(start)
 		data, err = r.doFetch(wantedRange)
 		r.removeFromOutstanding(start)
