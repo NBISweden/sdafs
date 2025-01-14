@@ -7,14 +7,38 @@ import (
 	"net/http"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/jarcoal/httpmock"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func testFailResponder(_ *http.Request) (*http.Response, error) {
-	return nil, fmt.Errorf("This failed")
+func getTestFailResponder(counter, failFirst *int) func(_ *http.Request) (*http.Response, error) {
+
+	return func(r *http.Request) (*http.Response, error) {
+		*counter += 1
+
+		if *counter > *failFirst {
+			return testDataResponder(r)
+		}
+
+		return nil, fmt.Errorf("This failed")
+	}
+}
+
+func getTestServerFailResponder(counter, failFirst *int) func(_ *http.Request) (*http.Response, error) {
+
+	return func(r *http.Request) (*http.Response, error) {
+		*counter += 1
+
+		if *counter > *failFirst {
+			return testDataResponder(r)
+		}
+
+		resp := http.Response{StatusCode: http.StatusInternalServerError}
+		return &resp, nil
+	}
 }
 
 func testDataResponder(r *http.Request) (*http.Response, error) {
@@ -34,8 +58,6 @@ func testDataResponder(r *http.Request) (*http.Response, error) {
 
 	startC, startSpec := m["startCoordinate"]
 	endC, endSpec := m["endCoordinate"]
-
-	// rangeHeader, rangeSet := r.Header["Range"]
 
 	if !startSpec && !endSpec {
 
@@ -72,7 +94,11 @@ func TestHTTPReader(t *testing.T) {
 	httpmock.RegisterResponder("GET", url,
 		testDataResponder)
 
-	reader, err := NewHTTPReader(url, "", 14000, http.DefaultClient, clientPublicKeyHeader())
+	reader, err := NewHTTPReader(url, "",
+		14000,
+		http.DefaultClient,
+		clientPublicKeyHeader(),
+		0)
 	assert.Nil(t, err, "Backend failed")
 
 	if reader == nil {
@@ -169,16 +195,17 @@ func TestHTTPReaderPrefetches(t *testing.T) {
 	defer httpmock.DeactivateAndReset()
 
 	url := "https://my.sda.local/url"
-	failurl := "https://fail.sda.local/url"
 
 	httpmock.RegisterResponder("GET", url,
 		testDataResponder)
 
-	httpmock.RegisterResponder("GET", failurl,
-		testFailResponder)
-
 	var readBackBuffer [4096]byte
-	seeker, err := NewHTTPReader(url, "token", 14000, http.DefaultClient, clientPublicKeyHeader())
+	seeker, err := NewHTTPReader(url,
+		"token",
+		14000,
+		http.DefaultClient,
+		clientPublicKeyHeader(),
+		0)
 	assert.Nil(t, err, "New reader failed unexpectedly")
 
 	_, err = seeker.Read(readBackBuffer[0:4096])
@@ -188,14 +215,18 @@ func TestHTTPReaderPrefetches(t *testing.T) {
 	err = seeker.Close()
 	assert.Nil(t, err, "unexpected error when closing")
 
-	reader, err := NewHTTPReader(url, "token", 14000, http.DefaultClient,
-		clientPublicKeyHeader())
+	reader, err := NewHTTPReader(url,
+		"token",
+		14000,
+		http.DefaultClient,
+		clientPublicKeyHeader(),
+		0)
 	assert.Nil(t, err, "unexpected error when creating reader")
 	assert.NotNil(t, reader, "unexpected error when creating reader")
 
 	s := reader
 
-	s.prefetchAt(0)
+	s.prefetchAt(0*time.Second, 0)
 	assert.Equal(t, 1, len(cache[url]), "nothing cached after prefetch")
 	// Clear cache
 	cache[url] = cache[url][:0]
@@ -206,7 +237,7 @@ func TestHTTPReaderPrefetches(t *testing.T) {
 	for i := 0; i < 30; i++ {
 		cache[url] = append(cache[url], CacheBlock{90000000, uint64(0), nil})
 	}
-	s.prefetchAt(0)
+	s.prefetchAt(0*time.Second, 0)
 	assert.Equal(t, 9, len(cache[url]), "unexpected length of cache after prefetch")
 
 	prefetches[url] = []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
@@ -226,33 +257,73 @@ func TestHTTPReaderFailures(t *testing.T) {
 
 	failurl := "https://fail.sda.local/url"
 
+	failCounter := 0
+	failFirst := 10
 	httpmock.RegisterResponder("GET", failurl,
-		testFailResponder)
-
-	url := "https://my.sda.local/url"
-
-	httpmock.RegisterResponder("GET", failurl,
-		testDataResponder)
+		getTestFailResponder(&failCounter, &failFirst))
+	httpmock.RegisterResponder("GET", failurl+"2",
+		getTestServerFailResponder(&failCounter, &failFirst))
 
 	var readBackBuffer [4096]byte
 
-	failreader, err := NewHTTPReader(failurl, "token", 14000, http.DefaultClient, nil)
-	// We don't fail yet
+	// test first where the
+	failreader, err := NewHTTPReader(failurl,
+		"token",
+		14000,
+		http.DefaultClient,
+		clientPublicKeyHeader(),
+		2)
+	// We shouldn't see failures yet
 	assert.Nil(t, err, "unexpected error when creating reader")
 	assert.NotNil(t, failreader, "unexpected error when creating reader")
 
 	n, err := failreader.Read(readBackBuffer[:])
 	assert.Equal(t, 0, n, "unexpected data read from broken reader")
 	assert.NotNil(t, err, "unexpected lack of error when using broken reader")
-
-	noheaderreader, err := NewHTTPReader(url, "token", 14000, http.DefaultClient, nil)
-	// We don't fail yet
-	assert.Nil(t, err, "unexpected error when creating reader")
-	assert.NotNil(t, noheaderreader, "unexpected error when creating reader")
+	assert.Equal(t, 3, failCounter, "Unexpected number of calls before giving up")
 
 	n, err = failreader.Read(readBackBuffer[:])
 	assert.Equal(t, 0, n, "unexpected data read from broken reader")
 	assert.NotNil(t, err, "unexpected lack of error when using broken reader")
+	assert.Equal(t, 6, failCounter, "Unexpected number of calls before giving up")
+
+	failCounter = 0
+	failFirst = 2
+	n, err = failreader.Read(readBackBuffer[:])
+	assert.Equal(t, 4096, n, "unexpected lack of data read from broken reader")
+	assert.Nil(t, err, "unexpected error when using broken reader")
+	assert.Equal(t, 3, failCounter, "Unexpected number of calls before succeeding")
+
+	failCounter = 0
+	failFirst = 10
+
+	serverFailReader, err := NewHTTPReader(failurl+"2",
+		"token",
+		14000,
+		http.DefaultClient,
+		clientPublicKeyHeader(),
+		2)
+	// We shouldn't see failures yet
+	assert.Nil(t, err, "unexpected error when creating reader")
+	assert.NotNil(t, serverFailReader, "unexpected error when creating reader")
+
+	n, err = serverFailReader.Read(readBackBuffer[:])
+	assert.Equal(t, 0, n, "unexpected data read from broken reader")
+	assert.NotNil(t, err, "unexpected lack of error when using broken reader")
+	assert.Equal(t, 3, failCounter, "Unexpected number of calls before giving up")
+
+	n, err = serverFailReader.Read(readBackBuffer[:])
+	assert.Equal(t, 0, n, "unexpected data read from broken reader")
+	assert.NotNil(t, err, "unexpected lack of error when using broken reader")
+	assert.Equal(t, 6, failCounter, "Unexpected number of calls before giving up")
+
+	failCounter = 0
+	failFirst = 2
+	n, err = serverFailReader.Read(readBackBuffer[:])
+	assert.Equal(t, 4096, n, "unexpected lack of data read from broken reader")
+	assert.Nil(t, err, "unexpected error when using broken reader")
+	assert.Equal(t, 3, failCounter, "Unexpected number of calls before succeeding")
+
 }
 
 func testDoRequestResponder(r *http.Request) (*http.Response, error) {

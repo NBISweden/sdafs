@@ -54,6 +54,24 @@ type SDAfs struct {
 	keyHeader http.Header
 }
 
+// Conf holds the configuration
+type Conf struct {
+	CredentialsFile  string
+	RootURL          string
+	RemoveSuffix     bool
+	SpecifyUID       bool
+	SpecifyGID       bool
+	UID              uint32
+	GID              uint32
+	SpecifyDirPerms  bool
+	SpecifyFilePerms bool
+	SkipLevels       int
+	MaxRetries       int
+	DirPerms         os.FileMode
+	FilePerms        os.FileMode
+	HTTPClient       *http.Client
+}
+
 // inode is the struct to manage a directory entry
 type inode struct {
 	attr fuseops.InodeAttributes
@@ -179,22 +197,6 @@ func (s *SDAfs) getDatasets() error {
 	}
 
 	return nil
-}
-
-type Conf struct {
-	CredentialsFile  string
-	RootURL          string
-	RemoveSuffix     bool
-	SpecifyUID       bool
-	SpecifyGID       bool
-	UID              uint32
-	GID              uint32
-	SpecifyDirPerms  bool
-	SpecifyFilePerms bool
-	SkipLevels       int
-	DirPerms         os.FileMode
-	FilePerms        os.FileMode
-	HTTPClient       *http.Client
 }
 
 type datasetFile struct {
@@ -738,7 +740,7 @@ func (s *SDAfs) OpenFile(
 		return fuse.EINVAL
 	}
 
-	r, err := httpreader.NewHTTPReader(s.getFileURL(in), s.token, s.getTotalSize(in), s.client, &s.keyHeader)
+	r, err := httpreader.NewHTTPReader(s.getFileURL(in), s.token, s.getTotalSize(in), s.client, &s.keyHeader, s.conf.MaxRetries)
 	if err != nil {
 		log.Printf("OpenFile failed: reader for %s gave: %v", in.key, err)
 		return fuse.EIO
