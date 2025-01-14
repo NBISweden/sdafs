@@ -15,7 +15,8 @@ import (
 
 var credentialsFile, rootURL, logFile string
 var foreground, open bool
-var maxRetries int
+var maxRetries uint
+var chunkSize uint
 
 var Version string = "development"
 
@@ -49,14 +50,30 @@ func getConfigs() mainConfig {
 	flag.StringVar(&logFile, "log", "", "File to send logs to instead of stderr,"+
 		" defaults to sdafs.log if detached, empty string means stderr which is default for foreground")
 
-	flag.IntVar(&maxRetries, "maxretries", 7, "Max number retries for failed transfers. Retries will be done with some form of backoff")
+	flag.UintVar(&maxRetries, "maxretries", 7, "Max number retries for failed transfers. "+
+		"Retries will be done with some form of backoff. Max 60")
 	flag.BoolVar(&foreground, "foreground", false, "Do not detach, run in foreground and send log output to stdout")
 	flag.BoolVar(&open, "open", false, "Set permissions allowing access by others than the user")
+	flag.UintVar(&chunkSize, "chunksize", 5120, "Chunk size (in kb) used when fetching data. "+
+		"Higher values likely to give better throughput but higher latency. Min 64 Max 16384.")
 
 	flag.Parse()
 
 	mountPoint := flag.Arg(0)
 	if mountPoint == "" || len(flag.Args()) != 1 {
+		usage()
+	}
+
+	// Some sanity checks
+	if chunkSize > 16384 || chunkSize < 64 {
+		fmt.Printf("Chunk size %d is not allowed, valid values are 64 to 16384\n\n",
+			chunkSize)
+		usage()
+	}
+
+	if maxRetries > 60 {
+		fmt.Printf("Max retries %d is not allowed, valid values are 0 to 60\n\n	",
+			maxRetries)
 		usage()
 	}
 
@@ -71,6 +88,8 @@ func getConfigs() mainConfig {
 		RootURL:         rootURL,
 		CredentialsFile: credentialsFile,
 		SkipLevels:      0,
+		ChunkSize:       int(chunkSize),
+		MaxRetries:      int(maxRetries),
 	}
 
 	if open {

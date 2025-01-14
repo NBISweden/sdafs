@@ -86,6 +86,15 @@ func clientPublicKeyHeader() *http.Header {
 	return &h
 }
 
+func useConf() *Conf {
+	c := Conf{
+		Client:     http.DefaultClient,
+		Headers:    clientPublicKeyHeader(),
+		MaxRetries: 7,
+		Token:      "token"}
+
+	return &c
+}
 func TestHTTPReader(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
@@ -94,11 +103,10 @@ func TestHTTPReader(t *testing.T) {
 	httpmock.RegisterResponder("GET", url,
 		testDataResponder)
 
-	reader, err := NewHTTPReader(url, "",
-		14000,
-		http.DefaultClient,
-		clientPublicKeyHeader(),
-		0)
+	reader, err := NewHTTPReader(
+		useConf(),
+		&Request{FileURL: url,
+			ObjectSize: 14000})
 	assert.Nil(t, err, "Backend failed")
 
 	if reader == nil {
@@ -200,12 +208,12 @@ func TestHTTPReaderPrefetches(t *testing.T) {
 		testDataResponder)
 
 	var readBackBuffer [4096]byte
-	seeker, err := NewHTTPReader(url,
-		"token",
-		14000,
-		http.DefaultClient,
-		clientPublicKeyHeader(),
-		0)
+
+	seeker, err := NewHTTPReader(
+		useConf(),
+		&Request{FileURL: url,
+			ObjectSize: 14000})
+
 	assert.Nil(t, err, "New reader failed unexpectedly")
 
 	_, err = seeker.Read(readBackBuffer[0:4096])
@@ -215,12 +223,11 @@ func TestHTTPReaderPrefetches(t *testing.T) {
 	err = seeker.Close()
 	assert.Nil(t, err, "unexpected error when closing")
 
-	reader, err := NewHTTPReader(url,
-		"token",
-		14000,
-		http.DefaultClient,
-		clientPublicKeyHeader(),
-		0)
+	reader, err := NewHTTPReader(
+		useConf(),
+		&Request{FileURL: url,
+			ObjectSize: 14000})
+
 	assert.Nil(t, err, "unexpected error when creating reader")
 	assert.NotNil(t, reader, "unexpected error when creating reader")
 
@@ -266,13 +273,14 @@ func TestHTTPReaderFailures(t *testing.T) {
 
 	var readBackBuffer [4096]byte
 
+	c := useConf()
+	c.MaxRetries = 2
 	// test first where the
-	failreader, err := NewHTTPReader(failurl,
-		"token",
-		14000,
-		http.DefaultClient,
-		clientPublicKeyHeader(),
-		2)
+	failreader, err := NewHTTPReader(
+		c,
+		&Request{FileURL: failurl,
+			ObjectSize: 14000})
+
 	// We shouldn't see failures yet
 	assert.Nil(t, err, "unexpected error when creating reader")
 	assert.NotNil(t, failreader, "unexpected error when creating reader")
@@ -297,12 +305,11 @@ func TestHTTPReaderFailures(t *testing.T) {
 	failCounter = 0
 	failFirst = 10
 
-	serverFailReader, err := NewHTTPReader(failurl+"2",
-		"token",
-		14000,
-		http.DefaultClient,
-		clientPublicKeyHeader(),
-		2)
+	serverFailReader, err := NewHTTPReader(
+		c,
+		&Request{FileURL: failurl + "2",
+			ObjectSize: 14000})
+
 	// We shouldn't see failures yet
 	assert.Nil(t, err, "unexpected error when creating reader")
 	assert.NotNil(t, serverFailReader, "unexpected error when creating reader")
@@ -358,10 +365,10 @@ func TestDoRequest(t *testing.T) {
 	httpmock.RegisterResponder("GET", checkurl,
 		testDoRequestResponder)
 
+	c := useConf()
 	r := HTTPReader{
+		conf:    c,
 		fileURL: checkurl,
-		token:   "token",
-		client:  http.DefaultClient,
 	}
 	resp, err := r.doRequest()
 
@@ -373,7 +380,7 @@ func TestDoRequest(t *testing.T) {
 	assert.Nil(t, err, "Unexpected error from doRequest")
 
 	h := http.Header{}
-	r.extraHeaders = &h
+	r.conf.Headers = &h
 	h.Add("HeaderA", "SomeGoose")
 
 	resp, err = r.doRequest()

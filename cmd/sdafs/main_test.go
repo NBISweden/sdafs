@@ -11,14 +11,40 @@ import (
 	"github.com/tj/assert"
 )
 
+// The handling of checking things that should exit is based on
+// https://stackoverflow.com/a/33404435
+
 func TestConfOptionNoMountPoint(t *testing.T) {
-	// https://stackoverflow.com/a/33404435
 	if os.Getenv("BE_CRASHER") == "1" {
 		getConfigs()
 		return
 	}
 
 	runExiting(t, "TestConfOptionNoMountPoint")
+}
+
+func TestBadChunkSize(t *testing.T) {
+	if os.Getenv("BE_CRASHER") == "1" {
+		os.Args = []string{"binary", "-chunksize", "30", "mountpoint"}
+		flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+		flag.Parse()
+		getConfigs()
+		return
+	}
+
+	runExiting(t, "TestBadChunkSize")
+}
+
+func TestBadMaxRetries(t *testing.T) {
+	if os.Getenv("BE_CRASHER") == "1" {
+		os.Args = []string{"binary", "-maxretries", "90", "mountpoint"}
+		flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+		flag.Parse()
+		getConfigs()
+		return
+	}
+
+	runExiting(t, "TestBadMaxRetries")
 }
 
 func TestConfOptions(t *testing.T) {
@@ -134,7 +160,8 @@ func runExiting(t *testing.T, testName string) {
 		return
 	}
 
-	t.Fatalf("process when it should not for test %s %v, want exit status 1",
+	t.Fatalf("process succeeded when it should not for test %s"+
+		" %v, want exit status 1",
 		testName,
 		err)
 
