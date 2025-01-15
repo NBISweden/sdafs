@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -91,6 +91,9 @@ type inode struct {
 	totalSize   uint64
 }
 
+// traceLevel is an extra level for more information than debug should give
+const traceLevel = -12
+
 // addInode adds the passed inode with a new id
 func (s *SDAfs) addInode(n *inode) fuseops.InodeID {
 	s.checkMaps()
@@ -165,13 +168,29 @@ func (s *SDAfs) doRequest(relPath, method string) (*http.Response, error) {
 	}
 
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", s.token))
+
+	// Add extra headers picked up, e.g. cookies
+	if s.keyHeader != nil {
+		for h := range s.keyHeader {
+			for _, v := range s.keyHeader.Values(h) {
+				req.Header.Add(h, v)
+			}
+		}
+	}
+
 	return s.client.Do(req)
 }
 
 // extractCookies picks up cookies from the response and sets them for further
 // use
 func (s *SDAfs) extractCookies(r *http.Response) {
-	log.Printf("extracting cookies from %v", r.Header)
+
+	slog.Log(context.Background(),
+		traceLevel,
+		"extracting cookies for reuse",
+		"header", r.Header,
+	)
+
 	setCookies := r.Header.Values("set-cookie")
 
 	newCookies := ""
@@ -181,6 +200,7 @@ func (s *SDAfs) extractCookies(r *http.Response) {
 		return
 	}
 
+	// TODO: Handle flags, e.g. max-age
 	for _, p := range setCookies {
 		cookie, _, _ := strings.Cut(p, ";")
 		if newCookies != "" {
@@ -488,13 +508,17 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 
 	mtime, err := time.Parse(time.RFC3339, entry.LastModified)
 	if err != nil {
-		log.Printf("Error while decoding modified for %s timestamp %s : %v",
-			entry.FileID, entry.LastModified, err)
+		slog.Error("Error while decoding modified timestamp",
+			"fileid", entry.FileID,
+			"timestamp", entry.LastModified,
+			"error", err)
 	}
 	ctime, err := time.Parse(time.RFC3339, entry.CreatedAt)
 	if err != nil {
-		log.Printf("Error while decoding created for %s timestamp %s: %v",
-			entry.FileID, entry.CreatedAt, err)
+		slog.Error("Error while decoding created timestamp",
+			"fileid", entry.FileID,
+			"timestamp", entry.CreatedAt,
+			"error", err)
 	}
 
 	dirName := filepath.Join(split[:len(split)-1]...)
@@ -535,7 +559,9 @@ func idToNum(s string) uint32 {
 	n, err := strconv.Atoi(s)
 
 	if err != nil {
-		log.Printf("Error while converting %s to number: %v", s, err)
+		slog.Error("Error while converting to number",
+			"text", s,
+			"error", err)
 		return 0
 	}
 
@@ -677,11 +703,13 @@ func (s *SDAfs) checkLoaded(i *inode) error {
 	s.loading = append(s.loading, i.dataset)
 	s.maplock.Unlock()
 
-	log.Printf("Loading dataset %v", i.dataset)
+	slog.Info("Loading dataset", "dataset", i.dataset)
 
 	err := s.loadDataset(i.dataset)
 	if err != nil {
-		// log.Printf("Couldn't load dataset %s: %v", i.dataset, err)
+		slog.Error("Couldn't load dataset",
+			"dataset", i.dataset,
+			"error", err)
 		return fmt.Errorf("couldn't load dataset %s: %v", i.dataset, err)
 	}
 	i.loaded = true
@@ -705,7 +733,8 @@ func (s *SDAfs) LookUpInode(
 		err := s.checkLoaded(parent)
 
 		if err != nil {
-			log.Printf("Returning eio from LookUpInode")
+			slog.Info("Returning EIO from LookUpInode",
+				"requestedname", op.Name)
 			return fuse.EIO
 		}
 	}
@@ -750,20 +779,23 @@ func (s *SDAfs) OpenFile(
 
 	err := s.checkPerms(&op.OpContext)
 	if err != nil {
-		log.Printf("OpenFile err: %v", err)
-
+		slog.Log(context.Background(),
+			traceLevel,
+			"Returning permission error for open",
+			"inode", op.Inode,
+			"err", err)
 		return err
 	}
 
 	in, found := s.inodes[op.Inode]
 	if !found {
-		log.Printf("OpenFile of non-existent file")
+		slog.Info("OpenFile of non-existent file", "inode", op.Inode)
 
 		return fuse.EEXIST
 	}
 
 	if in.dir {
-		log.Printf("OpenFile of directory")
+		slog.Info("OpenFile of directory", "inode", op.Inode)
 		return fuse.EINVAL
 	}
 
@@ -778,7 +810,9 @@ func (s *SDAfs) OpenFile(
 		&httpreader.Request{FileURL: s.getFileURL(in),
 			ObjectSize: s.getTotalSize(in)})
 	if err != nil {
-		log.Printf("OpenFile failed: reader for %s gave: %v", in.key, err)
+		slog.Error("OpenFile failed - error while creating reader",
+			"key", in.key,
+			"error", err)
 		return fuse.EIO
 	}
 
@@ -789,7 +823,9 @@ func (s *SDAfs) OpenFile(
 	if err != nil {
 		// Assume we are served non-encrypted content
 		inodeReader = r
-		log.Printf("OpenFile of %s as crypt4gh failed: %v", in.key, err)
+		slog.Debug("OpenFile automatic crypt4gh failed",
+			"key", in.key,
+			"error", err)
 	} else {
 		inodeReader = c4ghr
 	}
@@ -804,7 +840,8 @@ func (s *SDAfs) OpenFile(
 	id, err := s.getNewIDLocked()
 
 	if err != nil {
-		log.Printf("OpenFile error: %v", err)
+		slog.Debug("OpenFile id acquisition failed",
+			"error", err)
 		return fmt.Errorf("error while getting new ID: %v", err)
 	}
 
@@ -857,7 +894,9 @@ func (s *SDAfs) getFileURL(i *inode) string {
 	u, err := url.JoinPath(s.conf.RootURL, "/s3-encrypted/", i.dataset, i.key)
 
 	if err != nil {
-		log.Printf("Failed to create access URL for %s: %v", i.key, err)
+		slog.Debug("Failed to create access URL",
+			"key", i.key,
+			"error", err)
 		return ""
 	}
 
@@ -873,13 +912,18 @@ func (s *SDAfs) getTotalSize(i *inode) uint64 {
 
 	url, err := url.JoinPath("s3-encrypted", i.dataset, i.key)
 	if err != nil {
-		log.Printf("Error while making URL for size for %s: %v", i.key, err)
+		slog.Debug("Error while making URL for size check",
+			"key", i.key,
+			"error", err)
 		return 0
 	}
 
 	r, err := s.doRequest(url, "HEAD")
 	if err != nil {
-		log.Printf("F URL for %s", i.key)
+		slog.Debug("Error while making request to URL for size check",
+			"key", i.key,
+			"url", url,
+			"error", err)
 		return 0
 	}
 
@@ -909,7 +953,9 @@ func (s *SDAfs) getTotalSize(i *inode) uint64 {
 
 	// No header helps, use a reasonable default
 
-	log.Printf("HEAD didn't help for total size for %s, use default 124", url)
+	slog.Debug("HEAD didn't help for total size, using default 124",
+		"url", url,
+		"key", i.key)
 	i.totalSize = 124 + i.rawFileSize
 
 	return 124 + i.rawFileSize
@@ -922,20 +968,25 @@ func (s *SDAfs) ReadFile(
 	r, exist := s.handles[op.Handle]
 
 	if !exist {
-		log.Printf("ReadFile for something that doesn't exist")
+		slog.Info("ReadFile called for handle that doesn't exist",
+			"handle", op.Handle)
 		return fuse.EIO
 	}
 
 	pos, err := r.Seek(op.Offset, io.SeekStart)
 	if err != nil || pos != op.Offset {
-		log.Printf("Seek failed or didn't return expected result: %v", err)
+		slog.Info("Seek failed or didn't return expected result",
+			"handle", op.Handle,
+			"error", err)
 		return fuse.EIO
 	}
 
 	op.BytesRead, err = r.Read(op.Dst)
 
 	if err != nil && err != io.EOF {
-		log.Printf("Reading gave error %v", err)
+		slog.Info("Reading gave error",
+			"handle", op.Handle,
+			"error", err)
 	}
 
 	// Special case: FUSE doesn't expect us to return io.EOF.
@@ -959,21 +1010,23 @@ func (s *SDAfs) ReadDir(
 
 	info, ok := s.inodes[op.Inode]
 	if !ok {
-		log.Printf("ReadDir called for unexistant directory, " +
-			"this shouldn't happen")
+		slog.Info("ReadDir called for non-existant directory",
+			"inode", op.Inode)
 		return fuse.ENOENT
 	}
 
 	if !info.dir {
-		log.Printf("ReadDir for something not a directory")
+		slog.Info("ReadDir called for something that is not a directory",
+			"inode", op.Inode)
 		return fuse.EIO
 	}
 
 	if info.key == "/" {
 		err := s.checkLoaded(info)
 		if err != nil {
-			log.Printf("ReadDir failed loading dataset %s: %v",
-				info.dataset, err)
+			slog.Error("ReadDir failed loading dataset",
+				"dataset", info.dataset,
+				"error", err)
 			return fuse.EIO
 		}
 	}
