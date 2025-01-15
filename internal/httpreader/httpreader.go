@@ -3,9 +3,10 @@ package httpreader
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"math"
 	"net/http"
 	"strings"
@@ -26,6 +27,8 @@ type Request struct {
 	ObjectSize uint64
 }
 
+const traceLevel = -12
+
 // TODO: Make something better that does TTLing
 
 var cache map[string][]CacheBlock
@@ -33,6 +36,8 @@ var cacheLock sync.Mutex
 var prefetches map[string][]uint64
 var prefetchLock sync.Mutex
 
+var idLock sync.Mutex
+var nextID uint64
 var once sync.Once
 
 // CacheBlock is used to keep track of cached data
@@ -72,18 +77,21 @@ type HTTPReader struct {
 	fileURL       string
 	objectSize    uint64
 	lock          sync.Mutex
+	id            uint64
 }
 
 func NewHTTPReader(conf *Conf, request *Request,
 ) (*HTTPReader, error) {
-
-	log.Printf("Creating reader for %v, object size %v", request.FileURL, request.ObjectSize)
+	idLock.Lock()
+	slog.Info("Creating reader", "url", request.FileURL, "objectsize", request.ObjectSize, "id", nextID)
 	reader := &HTTPReader{
 		conf:       conf,
 		fileURL:    request.FileURL,
 		objectSize: request.ObjectSize,
-		lock:       sync.Mutex{},
+		id:         nextID,
 	}
+	nextID += 1
+	idLock.Unlock()
 
 	reader.initCache()
 
@@ -91,11 +99,22 @@ func NewHTTPReader(conf *Conf, request *Request,
 }
 
 func (r *HTTPReader) Close() (err error) {
+	slog.Log(context.Background(),
+		traceLevel,
+		"Pruning cache",
+		"url", r.fileURL,
+		"id", r.id)
 
 	return nil
 }
 
 func (r *HTTPReader) pruneCache() {
+	slog.Log(context.Background(),
+		traceLevel,
+		"Pruning cache",
+		"url", r.fileURL,
+		"id", r.id)
+
 	cacheLock.Lock()
 	defer cacheLock.Unlock()
 
@@ -106,15 +125,23 @@ func (r *HTTPReader) pruneCache() {
 	// Prune the cache
 	keepfrom := len(cache[r.fileURL]) - 8
 	cache[r.fileURL] = cache[r.fileURL][keepfrom:]
-
 }
 
 func (r *HTTPReader) prefetchSize() uint64 {
-
-	return 10 * 1024 * 1024 / 65536 * (65536 + 28)
+	if r.conf.ChunkSize < 64 {
+		return 64 * 1024
+	}
+	return uint64(r.conf.ChunkSize * 1024)
 }
 
 func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
+	slog.Log(context.Background(),
+		traceLevel,
+		"Making fetch request",
+		"url", r.fileURL,
+		"range", rangeSpec,
+		"id", r.id)
+
 	useURL := r.fileURL
 
 	if rangeSpec != "" {
@@ -158,12 +185,24 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 		}
 	}
 
+	beforeRequest := time.Now()
 	resp, err := r.conf.Client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"Error while making request for %s: %v",
 			r.fileURL, err)
 	}
+	duration := time.Since(beforeRequest)
+
+	slog.Log(context.Background(),
+		traceLevel,
+		"Fetch returned",
+		"url", r.fileURL,
+		"id", r.id,
+		"range", rangeSpec,
+		"status", resp.StatusCode,
+		"duration", duration,
+	)
 
 	if resp.StatusCode != http.StatusOK {
 		errData, err := io.ReadAll(resp.Body)
@@ -189,20 +228,43 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 }
 
 func (r *HTTPReader) isInCache(offset uint64) bool {
+	slog.Log(context.Background(),
+		traceLevel,
+		"Checking if offset is in cache",
+		"url", r.fileURL,
+		"id", r.id,
+		"offset", offset)
 	cacheLock.Lock()
 	defer cacheLock.Unlock()
 	// Check if we have the data in cache
 	for _, p := range cache[r.fileURL] {
 		if offset >= p.start && offset < p.start+p.length {
 			// At least part of the data is here
+			slog.Log(context.Background(),
+				traceLevel,
+				"Offset found in cache",
+				"url", r.fileURL,
+				"id", r.id,
+				"offset", offset)
 			return true
 		}
 	}
+
+	slog.Log(context.Background(),
+		traceLevel,
+		"Offset not found in cache",
+		"url", r.fileURL,
+		"offset", offset)
 
 	return false
 }
 
 func (r *HTTPReader) prefetchAt(waitBefore time.Duration, offset uint64) {
+	slog.Log(context.Background(),
+		traceLevel,
+		"Doing prefetch",
+		"url", r.fileURL,
+		"offset", offset)
 	if waitBefore.Seconds() > 0 {
 		time.Sleep(waitBefore)
 	}
@@ -397,8 +459,17 @@ func (r *HTTPReader) doRequest() (*http.Response, error) {
 }
 
 func (r *HTTPReader) Read(dst []byte) (n int, err error) {
+
 	r.lock.Lock()
 	start := r.currentOffset
+	slog.Log(context.Background(),
+		traceLevel,
+		"Read entered",
+		"url", r.fileURL,
+		"id", r.id,
+		"offset", start,
+		"maxlength", len(dst))
+
 	r.lock.Unlock()
 
 	if start >= r.objectSize {
@@ -449,16 +520,19 @@ func (r *HTTPReader) Read(dst []byte) (n int, err error) {
 
 	var data []byte
 	var wait time.Duration = 1
+
 	for tries := 0; tries <= r.conf.MaxRetries; tries++ {
 		r.addToOutstanding(start)
 		data, err = r.doFetch(wantedRange)
 		r.removeFromOutstanding(start)
 
-		if err != nil {
-			// Something went wrong, wait and retry
-			time.Sleep(wait * time.Second)
-			wait *= 2
+		if err == nil {
+			break
 		}
+
+		// Something went wrong, wait and retry
+		time.Sleep(wait * time.Second)
+		wait *= 2
 	}
 
 	if err != nil {

@@ -4,7 +4,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 
@@ -17,6 +19,7 @@ var credentialsFile, rootURL, logFile string
 var foreground, open bool
 var maxRetries uint
 var chunkSize uint
+var logLevel int
 
 var Version string = "development"
 
@@ -37,6 +40,7 @@ type mainConfig struct {
 	logFile    string
 	sdafsconf  *sdafs.Conf
 	open       bool
+	logLevel   slog.Level
 }
 
 // mainConfig makes the configuration structure from whatever sources applies
@@ -56,6 +60,7 @@ func getConfigs() mainConfig {
 	flag.BoolVar(&open, "open", false, "Set permissions allowing access by others than the user")
 	flag.UintVar(&chunkSize, "chunksize", 5120, "Chunk size (in kb) used when fetching data. "+
 		"Higher values likely to give better throughput but higher latency. Min 64 Max 16384.")
+	flag.IntVar(&logLevel, "loglevel", 0, "Loglevel, specified as per https://pkg.go.dev/log/slog#Level")
 
 	flag.Parse()
 
@@ -105,6 +110,7 @@ func getConfigs() mainConfig {
 		foreground: foreground,
 		logFile:    useLogFile,
 		open:       open,
+		logLevel:   slog.Level(logLevel),
 	}
 
 	return m
@@ -112,16 +118,23 @@ func getConfigs() mainConfig {
 
 // repointLog switches where the log goes if needed
 func repointLog(m mainConfig) {
+
+	var logDestination io.Writer = os.Stdout
+
 	if m.logFile != "" {
-		f, err := os.OpenFile(m.logFile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+		var err error
+		logDestination, err = os.OpenFile(m.logFile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 
 		if err != nil {
 			log.Fatalf("Couldn't open requested log file %s: %v",
 				m.logFile, err)
 		}
-
-		log.SetOutput(f)
 	}
+	options := slog.HandlerOptions{Level: m.logLevel}
+
+	handler := slog.NewTextHandler(logDestination, &options)
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
 }
 
 // detachIfNeeded daemonizes if needed
@@ -139,7 +152,8 @@ func detachIfNeeded(c mainConfig) {
 		}
 
 		if err := context.Release(); err != nil {
-			log.Printf("Unable to release pid-file: %s", err.Error())
+			slog.Info("Unable to release pid file",
+				"error", err.Error())
 		}
 	}
 }
@@ -186,10 +200,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Mount of sda at %s failed: %v", c.sdafsconf.RootURL, err)
 	}
-	log.Printf("SDA mount of %s ready at %s", c.sdafsconf.RootURL, c.mountPoint)
+	slog.Info("SDA mount ready", "rootURL", c.sdafsconf.RootURL, "mountpoint", c.mountPoint)
 
 	afterMount(c, mount)
-	log.Printf("SDA unmounted from %s, exiting", c.mountPoint)
+	slog.Info("SDA unmounted", "mountpoint", c.mountPoint)
 }
 
 // afterMount does what happens after mount, essentially wait for a signal or
@@ -211,11 +225,12 @@ func handleSignals(c chan os.Signal, m string) {
 	for {
 		s := <-c
 
-		log.Printf("Received signal %v, exiting", s)
+		slog.Debug("Received signal exiting", "signal", s)
 		// TODO: Retry on failure?
 		err := fuse.Unmount(m)
 		if err != nil {
-			log.Fatalf("Unmounting failed %v", err)
+			slog.Error("Unmounting failed", "err", err)
+			os.Exit(1)
 		}
 	}
 }
