@@ -152,7 +152,9 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 
 	if r.conf.Headers != nil {
 		for h := range *r.conf.Headers {
-			req.Header.Add(h, r.conf.Headers.Get(h))
+			for _, v := range r.conf.Headers.Values(h) {
+				req.Header.Add(h, v)
+			}
 		}
 	}
 

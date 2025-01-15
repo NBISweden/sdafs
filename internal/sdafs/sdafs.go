@@ -56,21 +56,22 @@ type SDAfs struct {
 
 // Conf holds the configuration
 type Conf struct {
-	CredentialsFile  string
-	RootURL          string
-	RemoveSuffix     bool
-	SpecifyUID       bool
-	SpecifyGID       bool
-	UID              uint32
-	GID              uint32
-	SpecifyDirPerms  bool
-	SpecifyFilePerms bool
-	SkipLevels       int
-	MaxRetries       int
-	DirPerms         os.FileMode
-	FilePerms        os.FileMode
-	HTTPClient       *http.Client
-	ChunkSize        int
+	CredentialsFile   string
+	RootURL           string
+	RemoveSuffix      bool
+	SpecifyUID        bool
+	SpecifyGID        bool
+	UID               uint32
+	GID               uint32
+	SpecifyDirPerms   bool
+	SpecifyFilePerms  bool
+	SkipLevels        int
+	MaxRetries        int
+	DirPerms          os.FileMode
+	FilePerms         os.FileMode
+	HTTPClient        *http.Client
+	ChunkSize         int
+	SessionCookieName string
 }
 
 // inode is the struct to manage a directory entry
@@ -167,6 +168,30 @@ func (s *SDAfs) doRequest(relPath, method string) (*http.Response, error) {
 	return s.client.Do(req)
 }
 
+// extractCookies picks up cookies from the response and sets them for further
+// use
+func (s *SDAfs) extractCookies(r *http.Response) {
+	log.Printf("extracting cookies from %v", r.Header)
+	setCookies := r.Header.Values("set-cookie")
+
+	newCookies := ""
+
+	// No cookie instructions
+	if len(setCookies) == 0 {
+		return
+	}
+
+	for _, p := range setCookies {
+		cookie, _, _ := strings.Cut(p, ";")
+		if newCookies != "" {
+			newCookies += "; "
+		}
+		newCookies = newCookies + cookie
+	}
+
+	s.keyHeader.Set("cookie", newCookies)
+}
+
 func (s *SDAfs) getDatasets() error {
 	r, err := s.doRequest("/metadata/datasets", "GET")
 
@@ -182,6 +207,9 @@ func (s *SDAfs) getDatasets() error {
 			"Dataset request didn't return 200, we got %d",
 			r.StatusCode)
 	}
+
+	// Pick up cookies for further use
+	s.extractCookies(r)
 
 	text, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -516,8 +544,6 @@ func idToNum(s string) uint32 {
 
 // setup makes various initialisations
 func (s *SDAfs) setup() error {
-	//
-
 	if s.conf == nil {
 		return fmt.Errorf("no configuration specified")
 	}
