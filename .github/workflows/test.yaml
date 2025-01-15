@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  push:
+    paths:
+      - "**.go"
+
+permissions: {}
+
+jobs:
+  test:
+    permissions:
+      contents: read
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+        id: go
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Run test and annotate
+        uses: robherley/go-test-action@v0
