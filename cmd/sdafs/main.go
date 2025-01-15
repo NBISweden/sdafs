@@ -59,7 +59,7 @@ func getConfigs() mainConfig {
 	flag.BoolVar(&foreground, "foreground", false, "Do not detach, run in foreground and send log output to stdout")
 	flag.BoolVar(&open, "open", false, "Set permissions allowing access by others than the user")
 	flag.UintVar(&chunkSize, "chunksize", 5120, "Chunk size (in kb) used when fetching data. "+
-		"Higher values likely to give better throughput but higher latency. Min 64 Max 16384.")
+		"Higher values likely to give better throughput but higher latency. Min 64 Max 65536.")
 	flag.IntVar(&logLevel, "loglevel", 0, "Loglevel, specified as per https://pkg.go.dev/log/slog#Level")
 
 	flag.Parse()
@@ -70,7 +70,7 @@ func getConfigs() mainConfig {
 	}
 
 	// Some sanity checks
-	if chunkSize > 16384 || chunkSize < 64 {
+	if chunkSize > 65536 || chunkSize < 64 {
 		fmt.Printf("Chunk size %d is not allowed, valid values are 64 to 16384\n\n",
 			chunkSize)
 		usage()
