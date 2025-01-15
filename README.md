@@ -37,12 +37,34 @@ Armed with you configuration (e.g. in `~/Download/s3cmd.conf`), you can launch
 sdafs --credentialsfile ~/Download/s3cmd.conf /where/you/want/to/mount
 ```
 
+### Tuning
+
+The amount of data asked for in each request can be tuned with `--chunksize`.
+What is best for you will depend on your use case - if you read files
+sequentially (e.g. as making a copy), a fairly large value is likely to give
+better performance (although with diminishing returns). If you instead have
+a very random access pattern, a smaller value may be useful (again, with
+diminishing returns when reducing).
+
+A good way to think about this is that each request take a certain minimum
+amount of time (e.g. because signals mean to travel back and forth,
+authentication needs to be check, bookkeeping be done et.c.) and has another
+part that depends on the request size (transferring more data takes longer).
+
+If the additionally transferred data isn't used, obviously it's not worth doing
+the transfer. But it is likely better (faster) to do one larger transfer than
+two (or more) smaller.
+
 ### Troubleshooting
 
 By default, `sdafs` will daemonize after some rudimentary checks. After that,
 additional messages can be seen in the log file (`sdafs.log` in the current
 directory unless overridden when running in the background). Alternatively,
 `sdafs` can be run without detaching with by passing `--foreground`.
+
+The verbosity of messages can be controlled through `--loglevel`, which takes
+a number corresponding to [slog levels](https://pkg.go.dev/log/slog#Level). To
+get more than you probably want, use a low number, e.g. `-50` (minus fifty).
 
 ### Permissions
 
