@@ -30,6 +30,8 @@ import (
 	"gopkg.in/ini.v1"
 )
 
+const connectionCheckDelay = 1 * time.Second
+
 // SDAfs is the main structure to keep track of our SDA connection
 type SDAfs struct {
 	fuseutil.NotImplementedFileSystem
@@ -46,12 +48,15 @@ type SDAfs struct {
 	FilePerms      os.FileMode
 	inodes         map[fuseops.InodeID]*inode
 
-	startTime time.Time
-	client    *http.Client
-	maplock   sync.Mutex
-	nextInode fuseops.InodeID
-	handles   map[fuseops.HandleID]io.ReadSeekCloser
-	keyHeader http.Header
+	startTime   time.Time
+	client      *http.Client
+	maplock     sync.Mutex
+	nextInode   fuseops.InodeID
+	handles     map[fuseops.HandleID]io.ReadSeekCloser
+	extraHeader *http.Header
+
+	httpReaderConf *httpreader.Conf
+	tokenLoadTime  time.Time
 }
 
 // Conf holds the configuration
@@ -70,7 +75,8 @@ type Conf struct {
 	DirPerms          os.FileMode
 	FilePerms         os.FileMode
 	HTTPClient        *http.Client
-	ChunkSize         int
+	ChunkSize         uint64
+	CacheSize         uint64
 	SessionCookieName string
 }
 
@@ -133,6 +139,8 @@ func (s *SDAfs) readToken() error {
 		return fmt.Errorf("No configuration provided")
 	}
 
+	s.tokenLoadTime = time.Now()
+
 	f, err := ini.Load(s.conf.CredentialsFile)
 
 	if err != nil {
@@ -144,6 +152,7 @@ func (s *SDAfs) readToken() error {
 	for _, section := range f.Sections() {
 		if section.HasKey("access_token") {
 			s.token = section.Key("access_token").String()
+			s.httpReaderConf.Token = s.token
 			return nil
 		}
 	}
@@ -170,9 +179,9 @@ func (s *SDAfs) doRequest(relPath, method string) (*http.Response, error) {
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", s.token))
 
 	// Add extra headers picked up, e.g. cookies
-	if s.keyHeader != nil {
-		for h := range s.keyHeader {
-			for _, v := range s.keyHeader.Values(h) {
+	if s.extraHeader != nil {
+		for h := range *s.extraHeader {
+			for _, v := range s.extraHeader.Values(h) {
 				req.Header.Add(h, v)
 			}
 		}
@@ -188,7 +197,6 @@ func (s *SDAfs) extractCookies(r *http.Response) {
 	slog.Log(context.Background(),
 		traceLevel,
 		"extracting cookies for reuse",
-		"header", r.Header,
 	)
 
 	setCookies := r.Header.Values("set-cookie")
@@ -209,7 +217,11 @@ func (s *SDAfs) extractCookies(r *http.Response) {
 		newCookies = newCookies + cookie
 	}
 
-	s.keyHeader.Set("cookie", newCookies)
+	// We can't update directly since a Header is a map, but we can create
+	// a copy, update that and point to the new one.
+	newHeader := s.extraHeader.Clone()
+	newHeader.Set("cookie", newCookies)
+	s.extraHeader = &newHeader
 }
 
 func (s *SDAfs) getDatasets() error {
@@ -276,7 +288,55 @@ func NewSDAfs(conf *Conf) (*SDAfs, error) {
 		return nil, fmt.Errorf("error while verifying credentials: %v", err)
 	}
 
+	go n.checkConnectionLoop()
 	return n, nil
+}
+
+func (s *SDAfs) checkConnectionLoop() {
+	for {
+		time.Sleep(connectionCheckDelay)
+
+		stat, err := os.Stat(s.conf.CredentialsFile)
+		if err != nil {
+			slog.Error("Failed to stat credentials file",
+				"file", s.conf.CredentialsFile,
+				"error", err)
+		}
+
+		// Credentials file hasn't been updated, even if the token no longer
+		// works, there's nothing we can do, so continue waiting.
+		if !stat.ModTime().After(s.tokenLoadTime) {
+			continue
+		}
+
+		slog.Error("Credentials file changed, rereading",
+			"file", s.conf.CredentialsFile)
+
+		safeToken := s.token
+
+		err = s.readToken()
+		if err != nil {
+			// Failed, try to restore
+			s.token = safeToken
+			s.httpReaderConf.Token = safeToken
+			slog.Error("Failed to read token from credentials file",
+				"file", s.conf.CredentialsFile,
+				"error", err)
+			continue
+		}
+
+		err = s.getDatasets()
+		if err != nil {
+			// The updated token was no better it seems, go back
+			s.token = safeToken
+			s.httpReaderConf.Token = safeToken
+
+			slog.Error("Getting datasets failed after token reread, "+
+				"reverting to previous token",
+				"error", err)
+			continue
+		}
+	}
 }
 
 func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
@@ -325,6 +385,11 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 }
 
 func (s *SDAfs) createRoot() {
+
+	if len(s.inodes) > 0 {
+		// Already done
+		return
+	}
 
 	entries := make([]fuseutil.Dirent, 0)
 
@@ -630,8 +695,18 @@ func (s *SDAfs) setup() error {
 	publicKeyEncoded := base64.StdEncoding.EncodeToString(w.Bytes())
 	s.publicC4GHkey = publicKeyEncoded
 
-	s.keyHeader = make(http.Header)
-	s.keyHeader.Add("Client-Public-Key", publicKeyEncoded)
+	header := make(http.Header)
+	s.extraHeader = &header
+	s.extraHeader.Add("Client-Public-Key", publicKeyEncoded)
+
+	s.httpReaderConf = &httpreader.Conf{
+		Token:      s.token,
+		Client:     s.client,
+		Headers:    s.extraHeader,
+		MaxRetries: s.conf.MaxRetries,
+		ChunkSize:  s.conf.ChunkSize,
+		CacheSize:  s.conf.CacheSize,
+	}
 
 	return nil
 }
@@ -799,14 +874,7 @@ func (s *SDAfs) OpenFile(
 		return fuse.EINVAL
 	}
 
-	conf := httpreader.Conf{
-		Token:      s.token,
-		Client:     s.client,
-		Headers:    &s.keyHeader,
-		MaxRetries: s.conf.MaxRetries,
-		ChunkSize:  s.conf.ChunkSize,
-	}
-	r, err := httpreader.NewHTTPReader(&conf,
+	r, err := httpreader.NewHTTPReader(s.httpReaderConf,
 		&httpreader.Request{FileURL: s.getFileURL(in),
 			ObjectSize: s.getTotalSize(in)})
 	if err != nil {

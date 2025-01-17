@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/pbnjay/memory"
+
 	"github.com/NBISweden/sdafs/internal/sdafs"
 	"github.com/jacobsa/fuse"
 	"github.com/sevlyar/go-daemon"
@@ -19,6 +21,8 @@ var credentialsFile, rootURL, logFile string
 var foreground, open bool
 var maxRetries uint
 var chunkSize uint
+var cacheSize uint
+var cacheMemPerCent uint
 var logLevel int
 
 var Version string = "development"
@@ -61,6 +65,8 @@ func getConfigs() mainConfig {
 	flag.UintVar(&chunkSize, "chunksize", 5120, "Chunk size (in kb) used when fetching data. "+
 		"Higher values likely to give better throughput but higher latency. Min 64 Max 65536.")
 	flag.IntVar(&logLevel, "loglevel", 0, "Loglevel, specified as per https://pkg.go.dev/log/slog#Level")
+	flag.UintVar(&cacheSize, "cachesize", 0, "Cache size (in mb), overrides percent if set")
+	flag.UintVar(&cacheMemPerCent, "cachemempercent", 8, "Cache size (in % of process visible RAM)")
 
 	flag.Parse()
 
@@ -93,7 +99,7 @@ func getConfigs() mainConfig {
 		RootURL:         rootURL,
 		CredentialsFile: credentialsFile,
 		SkipLevels:      0,
-		ChunkSize:       int(chunkSize),
+		ChunkSize:       uint64(chunkSize),
 		MaxRetries:      int(maxRetries),
 	}
 
@@ -103,6 +109,13 @@ func getConfigs() mainConfig {
 
 		conf.DirPerms = 0555
 		conf.FilePerms = 0444
+	}
+
+	if cacheSize == 0 {
+		total := memory.TotalMemory()
+		conf.CacheSize = total * uint64(cacheMemPerCent) / 100
+	} else {
+		conf.CacheSize = uint64(cacheSize * 1024 * 1024)
 	}
 
 	m := mainConfig{mountPoint: mountPoint,

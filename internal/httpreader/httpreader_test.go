@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"slices"
 	"testing"
@@ -91,6 +92,7 @@ func useConf() *Conf {
 		Client:     http.DefaultClient,
 		Headers:    clientPublicKeyHeader(),
 		MaxRetries: 7,
+		CacheSize:  24 * 1024 * 1024,
 		Token:      "token"}
 
 	return &c
@@ -199,6 +201,7 @@ func TestHTTPReader(t *testing.T) {
 func TestHTTPReaderPrefetches(t *testing.T) {
 	// Some special tests here, messing with internals to expose behaviour
 
+	slog.SetLogLoggerLevel(-100)
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
@@ -232,22 +235,18 @@ func TestHTTPReaderPrefetches(t *testing.T) {
 	assert.NotNil(t, reader, "unexpected error when creating reader")
 
 	s := reader
-
+	cache.Clear()
 	s.prefetchAt(0*time.Second, 0)
-	assert.Equal(t, 1, len(cache[url]), "nothing cached after prefetch")
+	cache.Wait()
+	_, found := cache.Get(s.getCacheKey(0))
+	assert.Equal(t, true, found, "value not cached after prefetch")
+
 	// Clear cache
-	cache[url] = cache[url][:0]
-
-	prefetches[url] = []uint64{}
-	t.Logf("Cache %v, outstanding %v", cache[url], prefetches[url])
-
-	for i := 0; i < 30; i++ {
-		cache[url] = append(cache[url], CacheBlock{90000000, uint64(0), nil})
-	}
-	s.prefetchAt(0*time.Second, 0)
-	assert.Equal(t, 9, len(cache[url]), "unexpected length of cache after prefetch")
+	cache.Clear()
 
 	prefetches[url] = []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+	s.prefetchAt(0*time.Second, 0)
+
 	s.removeFromOutstanding(9)
 	assert.Equal(t, prefetches[url], []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8}, "unexpected outstanding prefetches after remove")
 	s.removeFromOutstanding(19)
@@ -259,6 +258,10 @@ func TestHTTPReaderPrefetches(t *testing.T) {
 }
 
 func TestHTTPReaderFailures(t *testing.T) {
+	if testing.Short() {
+		return
+	}
+
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
@@ -356,7 +359,7 @@ func testDoRequestResponder(r *http.Request) (*http.Response, error) {
 	return &resp, nil
 }
 
-func TestDoRequest(t *testing.T) {
+func TestDoFetch(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
@@ -370,37 +373,25 @@ func TestDoRequest(t *testing.T) {
 		conf:    c,
 		fileURL: checkurl,
 	}
-	resp, err := r.doRequest()
-
-	assert.Equal(t, http.StatusOK, resp.StatusCode, "Unexpected status code for doRequest")
+	resp, err := r.doFetch("bytes=0-10")
 	assert.Nil(t, err, "Unexpected error from doRequest")
 
-	msg, err := io.ReadAll(resp.Body)
-	assert.Equal(t, []byte("Auth:Bearer token A: B: "), msg, "Unexpected headers from doRequest")
+	assert.Equal(t, []byte("Auth:Bearer token A: B: "), resp, "Unexpected headers from doRequest")
 	assert.Nil(t, err, "Unexpected error from doRequest")
 
 	h := http.Header{}
 	r.conf.Headers = &h
 	h.Add("HeaderA", "SomeGoose")
 
-	resp, err = r.doRequest()
+	resp, err = r.doFetch("bytes=0-10")
 
-	assert.Equal(t, http.StatusOK, resp.StatusCode, "Unexpected status code for doRequest")
-	assert.Nil(t, err, "Unexpected error from doRequest")
-
-	msg, err = io.ReadAll(resp.Body)
-	assert.Equal(t, []byte("Auth:Bearer token A:SomeGoose B: "), msg, "Unexpected headers from doRequest with A header")
-	assert.Nil(t, err, "Unexpected error from doRequest")
+	assert.Nil(t, err, "Unexpected error from doFetch")
+	assert.Equal(t, []byte("Auth:Bearer token A:SomeGoose B: "), resp, "Unexpected headers from doRequest with A header")
 
 	h.Add("HeaderB", "SomeELSE")
 
-	resp, err = r.doRequest()
-
-	assert.Equal(t, http.StatusOK, resp.StatusCode, "Unexpected status code for doRequest with A and B headers")
+	resp, err = r.doFetch("bytes=0-10")
 	assert.Nil(t, err, "Unexpected error from doRequest")
-
-	msg, err = io.ReadAll(resp.Body)
-	assert.Equal(t, []byte("Auth:Bearer token A:SomeGoose B:SomeELSE "), msg, "Unexpected headers from doRequest")
-	assert.Nil(t, err, "Unexpected error from doRequest")
+	assert.Equal(t, []byte("Auth:Bearer token A:SomeGoose B:SomeELSE "), resp, "Unexpected headers from doRequest")
 
 }
