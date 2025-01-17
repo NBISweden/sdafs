@@ -12,14 +12,19 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dgraph-io/ristretto/v2"
 )
+
+const cacheLifeTime = 4 * time.Hour
 
 type Conf struct {
 	Token      string
 	Client     *http.Client
 	Headers    *http.Header
 	MaxRetries int
-	ChunkSize  int
+	ChunkSize  uint64
+	CacheSize  uint64
 }
 
 type Request struct {
@@ -31,8 +36,13 @@ const traceLevel = -12
 
 // TODO: Make something better that does TTLing
 
-var cache map[string][]CacheBlock
-var cacheLock sync.Mutex
+// type cacheKey struct {
+// 	fileURL string
+// 	offset  uint64
+// }
+
+var cache *ristretto.Cache[string, *CacheBlock]
+
 var prefetches map[string][]uint64
 var prefetchLock sync.Mutex
 
@@ -47,23 +57,27 @@ type CacheBlock struct {
 	data   []byte
 }
 
-func (r *HTTPReader) initCache() {
+func (r *HTTPReader) init() {
 	once.Do(func() {
+		var err error
 		// Make the map if not done yet
-		cache = make(map[string][]CacheBlock)
-		prefetches = make(map[string][]uint64)
+		config := ristretto.Config[string, *CacheBlock]{
+			NumCounters: int64(r.conf.CacheSize / r.prefetchSize() * 10),
+			MaxCost:     int64(r.conf.CacheSize),
+			BufferItems: 64,
+		}
+		cache, err = ristretto.NewCache(&config)
 
+		if err != nil {
+			slog.Error("Couldn't set up cache, running without, this will "+
+				"impact performance impact",
+				"error", err)
+		}
+		prefetches = make(map[string][]uint64)
 	})
 
-	cacheLock.Lock()
-	_, found := cache[r.fileURL]
-	if !found {
-		cache[r.fileURL] = make([]CacheBlock, 0, 32)
-	}
-	cacheLock.Unlock()
-
 	prefetchLock.Lock()
-	_, found = prefetches[r.fileURL]
+	_, found := prefetches[r.fileURL]
 	if !found {
 		prefetches[r.fileURL] = make([]uint64, 0, 32)
 	}
@@ -80,6 +94,8 @@ type HTTPReader struct {
 	id            uint64
 }
 
+// NewHTTPReader allocates a unique id and returns a HTTPReader from the
+// configuration struct (expected to be common) and the request
 func NewHTTPReader(conf *Conf, request *Request,
 ) (*HTTPReader, error) {
 	idLock.Lock()
@@ -93,40 +109,23 @@ func NewHTTPReader(conf *Conf, request *Request,
 	nextID += 1
 	idLock.Unlock()
 
-	reader.initCache()
+	reader.init()
 
 	return reader, nil
 }
 
+// Close is a no-op
 func (r *HTTPReader) Close() (err error) {
 	slog.Log(context.Background(),
 		traceLevel,
-		"Pruning cache",
+		"Close",
 		"url", r.fileURL,
 		"id", r.id)
 
 	return nil
 }
 
-func (r *HTTPReader) pruneCache() {
-	slog.Log(context.Background(),
-		traceLevel,
-		"Pruning cache",
-		"url", r.fileURL,
-		"id", r.id)
-
-	cacheLock.Lock()
-	defer cacheLock.Unlock()
-
-	if len(cache[r.fileURL]) < 16 {
-		return
-	}
-
-	// Prune the cache
-	keepfrom := len(cache[r.fileURL]) - 8
-	cache[r.fileURL] = cache[r.fileURL][keepfrom:]
-}
-
+// prefetchSzie returns the prefetch size to use, sanity chcked
 func (r *HTTPReader) prefetchSize() uint64 {
 	if r.conf.ChunkSize < 64 {
 		return 64 * 1024
@@ -134,6 +133,7 @@ func (r *HTTPReader) prefetchSize() uint64 {
 	return uint64(r.conf.ChunkSize * 1024)
 }
 
+// doFetch fetches the specified range of the url from the HTTPReader
 func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 	slog.Log(context.Background(),
 		traceLevel,
@@ -146,7 +146,7 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 
 	if rangeSpec != "" {
 		// Archive being broken regarding ranges for now,
-		// use query parameters instead.
+		// use query parameters as well to trigger partial file delivery
 
 		byteRange := strings.TrimPrefix(rangeSpec, "bytes=")
 		byteRanges := strings.Split(byteRange, "-")
@@ -227,34 +227,45 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 	return dat, err
 }
 
+func (r *HTTPReader) getCacheKey(offset uint64) string {
+	return fmt.Sprintf("%s%c%d",
+		r.fileURL,
+		'\x00',
+		offset/r.prefetchSize())
+}
+
 func (r *HTTPReader) isInCache(offset uint64) bool {
+	key := r.getCacheKey(offset)
+
 	slog.Log(context.Background(),
 		traceLevel,
 		"Checking if offset is in cache",
 		"url", r.fileURL,
 		"id", r.id,
-		"offset", offset)
-	cacheLock.Lock()
-	defer cacheLock.Unlock()
-	// Check if we have the data in cache
-	for _, p := range cache[r.fileURL] {
-		if offset >= p.start && offset < p.start+p.length {
-			// At least part of the data is here
-			slog.Log(context.Background(),
-				traceLevel,
-				"Offset found in cache",
-				"url", r.fileURL,
-				"id", r.id,
-				"offset", offset)
-			return true
-		}
+		"offset", offset,
+		"key", key)
+
+	cache.Wait()
+	entry, found := cache.Get(r.getCacheKey(offset))
+
+	if found && offset >= entry.start && offset < (entry.start+entry.length) {
+
+		slog.Log(context.Background(),
+			traceLevel,
+			"Offset found in cache",
+			"url", r.fileURL,
+			"id", r.id,
+			"offset", offset,
+			"key", key)
+		return true
 	}
 
 	slog.Log(context.Background(),
 		traceLevel,
 		"Offset not found in cache",
 		"url", r.fileURL,
-		"offset", offset)
+		"offset", offset,
+		"key", key)
 
 	return false
 }
@@ -265,11 +276,10 @@ func (r *HTTPReader) prefetchAt(waitBefore time.Duration, offset uint64) {
 		"Doing prefetch",
 		"url", r.fileURL,
 		"offset", offset)
-	if waitBefore.Seconds() > 0 {
+
+	if waitBefore > 0 {
 		time.Sleep(waitBefore)
 	}
-
-	r.pruneCache()
 
 	if offset >= r.objectSize {
 		// Don't try to prefetch what doesn't exist
@@ -299,8 +309,8 @@ func (r *HTTPReader) prefetchAt(waitBefore time.Duration, offset uint64) {
 
 	if err != nil {
 
-		if waitBefore == 0*time.Second {
-			waitBefore = 1
+		if waitBefore == 0 {
+			waitBefore = 1 * time.Second
 		} else {
 			waitBefore = 2 * waitBefore
 		}
@@ -312,7 +322,7 @@ func (r *HTTPReader) prefetchAt(waitBefore time.Duration, offset uint64) {
 		return
 	}
 
-	r.addToCache(CacheBlock{offset, uint64(len(prefetchedData)), prefetchedData})
+	r.addToCache(&CacheBlock{offset, uint64(len(prefetchedData)), prefetchedData})
 }
 
 func (r *HTTPReader) Seek(offset int64, whence int) (int64, error) {
@@ -370,23 +380,27 @@ func (r *HTTPReader) Seek(offset int64, whence int) (int64, error) {
 }
 
 // addToCache adds a prefetch to the list of outstanding prefetches once it's no longer active
-func (r *HTTPReader) addToCache(cacheBlock CacheBlock) {
-	cacheLock.Lock()
-	defer cacheLock.Unlock()
+func (r *HTTPReader) addToCache(cacheBlock *CacheBlock) {
+	slog.Log(context.Background(),
+		traceLevel,
+		"Adding to cache",
+		"url", r.fileURL,
+		"offset", cacheBlock.start,
+		"length", cacheBlock.length,
+		"key", r.getCacheKey(cacheBlock.start))
 
-	if len(cache[r.fileURL]) > 16 {
-		// Don't cache anything more right now
-		return
-	}
+	key := r.getCacheKey(cacheBlock.start)
 
-	// Store in cache
-
-	cache[r.fileURL] = append(cache[r.fileURL], cacheBlock)
-
+	cache.SetWithTTL(key, cacheBlock, int64(cacheBlock.length), cacheLifeTime)
 }
 
 // addToOutstanding adds a prefetch to the list of outstanding prefetches once it's no longer active
 func (r *HTTPReader) addToOutstanding(toAdd uint64) {
+	slog.Log(context.Background(),
+		traceLevel,
+		"Adding to outstanding",
+		"url", r.fileURL,
+		"offset", toAdd)
 	prefetchLock.Lock()
 	prefetches[r.fileURL] = append(prefetches[r.fileURL], toAdd)
 	prefetchLock.Unlock()
@@ -394,6 +408,12 @@ func (r *HTTPReader) addToOutstanding(toAdd uint64) {
 
 // removeFromOutstanding removes a prefetch from the list of outstanding prefetches once it's no longer active
 func (r *HTTPReader) removeFromOutstanding(toRemove uint64) {
+	slog.Log(context.Background(),
+		traceLevel,
+		"Removing from outstanding",
+		"url", r.fileURL,
+		"offset", toRemove)
+
 	prefetchLock.Lock()
 	defer prefetchLock.Unlock()
 
@@ -439,25 +459,6 @@ func (r *HTTPReader) isPrefetching(offset uint64) bool {
 	return false
 }
 
-func (r *HTTPReader) doRequest() (*http.Response, error) {
-
-	req, err := http.NewRequest("GET", r.fileURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"Couldn't make request for %s: %v",
-			r.fileURL, err)
-	}
-
-	if r.conf.Headers != nil {
-		for h := range *r.conf.Headers {
-			req.Header.Add(h, r.conf.Headers.Get(h))
-		}
-	}
-
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", r.conf.Token))
-	return r.conf.Client.Do(req)
-}
-
 func (r *HTTPReader) Read(dst []byte) (n int, err error) {
 
 	r.lock.Lock()
@@ -485,35 +486,53 @@ func (r *HTTPReader) Read(dst []byte) (n int, err error) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	if r.isInCache(start) {
+	key := r.getCacheKey(start)
+	slog.Log(context.Background(),
+		traceLevel,
+		"Checking cache",
+		"url", r.fileURL,
+		"id", r.id,
+		"offset", start,
+		"key", key)
+
+	// Worth waiting for quiescence if we can skip a fetch
+	cache.Wait()
+	p, found := cache.Get(key)
+	if found &&
+		(start >= p.start && start < p.start+p.length) {
+		// At least part of the data is here
+
+		slog.Log(context.Background(),
+			traceLevel,
+			"Hit in cache",
+			"url", r.fileURL,
+			"id", r.id,
+			"offset", start,
+			"key", key,
+			"cachestart", p.start,
+			"cacheend", p.start+p.length)
+
+		offsetInBlock := start - p.start
+
+		// Pull out wanted data (as much as we have)
+		n = copy(dst, p.data[offsetInBlock:])
 		r.lock.Lock()
-		cacheLock.Lock()
+		r.currentOffset = start + uint64(n) // #nosec G115
+		r.lock.Unlock()
 
-		defer r.lock.Unlock()
-		defer cacheLock.Unlock()
+		// Prefetch the next bit
+		go r.prefetchAt(0*time.Second, r.currentOffset)
 
-		// Walk through the cache
-		for _, p := range cache[r.fileURL] {
-			if start >= p.start && start < p.start+p.length {
-				// At least part of the data is here
-
-				offsetInBlock := start - p.start
-
-				// Pull out wanted data (as much as we have)
-				n = copy(dst, p.data[offsetInBlock:])
-				r.currentOffset = start + uint64(n) // #nosec G115
-
-				// Prefetch the next bit
-				go r.prefetchAt(0*time.Second, r.currentOffset)
-
-				return n, nil
-			}
-		}
-
-		// Expected in cache but not found, bail out and hope for better luck
-		// on retry
-		return 0, nil
+		return n, nil
 	}
+
+	slog.Log(context.Background(),
+		traceLevel,
+		"Not found in cache, need to read",
+		"url", r.fileURL,
+		"id", r.id,
+		"offset", start,
+		"key", key)
 
 	// Not found in cache, need to fetch data
 	wantedRange := fmt.Sprintf("bytes=%d-%d", r.currentOffset, min(r.currentOffset+r.prefetchSize()-1, r.objectSize-1))
@@ -541,7 +560,7 @@ func (r *HTTPReader) Read(dst []byte) (n int, err error) {
 
 	// Add to cache
 	cacheBytes := bytes.Clone(data)
-	r.addToCache(CacheBlock{start, uint64(len(cacheBytes)), cacheBytes})
+	r.addToCache(&CacheBlock{start, uint64(len(cacheBytes)), cacheBytes})
 
 	b := bytes.NewBuffer(data)
 	n, err = b.Read(dst)

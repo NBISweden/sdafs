@@ -128,6 +128,33 @@ func TestConfOptions(t *testing.T) {
 	assert.Equal(t, os.FileMode(0444), c.sdafsconf.FilePerms,
 		"Not default value for fileperms as expected")
 
+	defaultCacheWithMem := c.sdafsconf.CacheSize
+
+	os.Args = []string{"binary", "-cachesize", "10", "mount6"}
+	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+	flag.Parse()
+	c = getConfigs()
+
+	assert.Equal(t, "mount6", c.mountPoint,
+		"Didn't pick up expected mountpoint")
+
+	assert.Equal(t, uint64(10*1024*1024), c.sdafsconf.CacheSize,
+		"Did not see expected cache size")
+
+	os.Args = []string{"binary", "-cachemempercent", "90", "mount7"}
+	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+	flag.Parse()
+	c = getConfigs()
+
+	assert.Equal(t, "mount7", c.mountPoint,
+		"Didn't pick up expected mountpoint")
+
+	assert.Less(t, uint64(0), c.sdafsconf.CacheSize,
+		"Cache size not picked up from memory as expected ")
+
+	assert.Greater(t, c.sdafsconf.CacheSize, defaultCacheWithMem,
+		"Cache with 90% of RAM not larger than with default (8%)")
+
 	os.Args = safeArgs
 
 }
