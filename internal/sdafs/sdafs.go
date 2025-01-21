@@ -659,7 +659,13 @@ func (s *SDAfs) setup() error {
 	if s.conf.HTTPClient != nil {
 		s.client = s.conf.HTTPClient
 	} else {
-		transport := http.Transport{IdleConnTimeout: 1800 * time.Second}
+		transport := http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          100,
+			TLSHandshakeTimeout:   30 * time.Second,
+			ExpectContinueTimeout: 10 * time.Second,
+			IdleConnTimeout:       1800 * time.Second}
 		s.client = &http.Client{Transport: &transport}
 	}
 
