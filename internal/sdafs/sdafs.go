@@ -50,7 +50,7 @@ type SDAfs struct {
 
 	startTime   time.Time
 	client      *http.Client
-	maplock     sync.Mutex
+	maplock     sync.RWMutex
 	nextInode   fuseops.InodeID
 	handles     map[fuseops.HandleID]io.ReadSeekCloser
 	extraHeader *http.Header
@@ -102,7 +102,6 @@ const traceLevel = -12
 
 // addInode adds the passed inode with a new id
 func (s *SDAfs) addInode(n *inode) fuseops.InodeID {
-	s.checkMaps()
 
 	s.maplock.Lock()
 	i := s.nextInode
@@ -114,8 +113,26 @@ func (s *SDAfs) addInode(n *inode) fuseops.InodeID {
 	return i
 }
 
-// checkMaps makes sure we don't try to use maps that aren't there
-func (s *SDAfs) checkMaps() {
+// getInode fetches an inode
+func (s *SDAfs) getInode(n fuseops.InodeID) *inode {
+	s.maplock.RLock()
+	defer s.maplock.RUnlock()
+
+	return s.inodes[n]
+}
+
+// getInodeOK fetches an inode and whatever it was found or not
+func (s *SDAfs) getInodeOK(n fuseops.InodeID) (*inode, bool) {
+	s.maplock.RLock()
+	defer s.maplock.RUnlock()
+
+	inode, ok := s.inodes[n]
+	return inode, ok
+}
+
+// initMaps makes sure we don't try to use maps that aren't there
+func (s *SDAfs) initMaps() {
+
 	if s.inodes == nil {
 		s.inodes = make(map[fuseops.InodeID]*inode)
 	}
@@ -127,6 +144,7 @@ func (s *SDAfs) checkMaps() {
 	if s.handles == nil {
 		s.handles = make(map[fuseops.HandleID]io.ReadSeekCloser)
 	}
+
 }
 
 func (s *SDAfs) GetFileSystemServer() fuse.Server {
@@ -444,9 +462,9 @@ func (s *SDAfs) loadDataset(dataSetName string) error {
 
 	// Find the inode to attach stuff to by looking at the root and checking
 	// entries
-	for _, in := range s.inodes[fuseops.RootInodeID].entries {
+	for _, in := range s.getInode(fuseops.RootInodeID).entries {
 		if in.Name == dataSetName {
-			datasetBase = s.inodes[in.Inode]
+			datasetBase = s.getInode(in.Inode)
 
 			break
 		}
@@ -459,7 +477,7 @@ func (s *SDAfs) loadDataset(dataSetName string) error {
 	// Go through the list of files and attach, create directory entries and
 	// attach as needed
 	doneDirs := make(map[string]*inode)
-	doneDirs[""] = s.inodes[datasetBase.id]
+	doneDirs[""] = s.getInode(datasetBase.id)
 
 	s.trimNames(contents)
 
@@ -556,7 +574,7 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 		dIn := s.addInode(&dirInode)
 		dirs[consider] = &dirInode
 
-		parentInode := s.inodes[dirs[parent].id]
+		parentInode := s.getInode(dirs[parent].id)
 
 		newEntry := fuseutil.Dirent{
 			Offset: fuseops.DirOffset(len(parentInode.entries) + 1), // #nosec G115
@@ -607,7 +625,7 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 	}
 	fIn := s.addInode(&fInode)
 
-	parentInode := s.inodes[dirs[dirName].id]
+	parentInode := s.getInode(dirs[dirName].id)
 
 	newEntry := fuseutil.Dirent{
 		Offset: fuseops.DirOffset(len(parentInode.entries) + 1), // #nosec G115
@@ -680,7 +698,8 @@ func (s *SDAfs) setup() error {
 		s.FilePerms = s.conf.FilePerms
 	}
 
-	s.checkMaps()
+	s.initMaps()
+
 	s.startTime = time.Now()
 
 	publicKey, privateKey, err := keys.GenerateKeyPair()
@@ -756,7 +775,7 @@ func (s *SDAfs) GetInodeAttributes(
 	_ context.Context,
 	op *fuseops.GetInodeAttributesOp) error {
 
-	in, ok := s.inodes[op.Inode]
+	in, ok := s.getInodeOK(op.Inode)
 	if !ok {
 		return fuse.ENOENT
 	}
@@ -826,7 +845,7 @@ func (s *SDAfs) LookUpInode(
 	for _, entry := range parent.entries {
 		if entry.Name == op.Name {
 			found = true
-			child = s.inodes[entry.Inode]
+			child = s.getInode(entry.Inode)
 			break
 		}
 	}
@@ -868,7 +887,7 @@ func (s *SDAfs) OpenFile(
 		return err
 	}
 
-	in, found := s.inodes[op.Inode]
+	in, found := s.getInodeOK(op.Inode)
 	if !found {
 		slog.Info("OpenFile of non-existent file", "inode", op.Inode)
 
@@ -1082,7 +1101,7 @@ func (s *SDAfs) ReadDir(
 	_ context.Context,
 	op *fuseops.ReadDirOp) error {
 
-	info, ok := s.inodes[op.Inode]
+	info, ok := s.getInodeOK(op.Inode)
 	if !ok {
 		slog.Info("ReadDir called for non-existant directory",
 			"inode", op.Inode)
