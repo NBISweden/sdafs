@@ -18,11 +18,24 @@ import (
 
 const DRIVERNAME = "csi.sda.nbis.se"
 
-var VERSIONS = []string{"1.31.0"}
+var VERSIONS = []string{"1.0.0"}
 
+// registerKubelet registers the driver within kubelet
 func (d *Driver) registerKubelet() error {
 
-	opts := []grpc.ServerOption{}
+	klog.V(8).Infof("Registering CSI driver with kubelet")
+
+	opts := []grpc.ServerOption{
+		grpc.UnaryInterceptor(
+			func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+				klog.V(10).Infof("Call to kubelet registration socket, request: %T %v", req, req)
+
+				logger := klog.FromContext(ctx)
+				resp, err = handler(klog.NewContext(ctx, logger), req)
+				klog.V(10).Infof("Response,err: %v, %v", resp, err)
+				return resp, err
+			}),
+	}
 	csiServer := grpc.NewServer(opts...)
 
 	kubeletSocketPath := "unix:///var/lib/kubelet/plugins/kubelet.sock"
@@ -36,6 +49,8 @@ func (d *Driver) registerKubelet() error {
 	if err != nil {
 		return fmt.Errorf("error while setting up listen for grpc: %v", err)
 	}
+
+	pluginregistration.RegisterRegistrationServer(csiServer, d)
 
 	go func() {
 		err := csiServer.Serve(listener)
@@ -64,7 +79,17 @@ func NewDriver(endpoint, nodeID, kubeletSocket *string) *Driver {
 }
 
 func (d *Driver) Run() error {
-	opts := []grpc.ServerOption{}
+	klog.V(4).Infof("Starting CSI")
+
+	opts := []grpc.ServerOption{grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		klog.V(10).Infof("Call to CSI socket, request: %T %v", req, req)
+
+		logger := klog.FromContext(ctx)
+		resp, err = handler(klog.NewContext(ctx, logger), req)
+		klog.V(10).Infof("Response,err: %v, %v", resp, err)
+		return resp, err
+	}),
+	}
 	d.server = grpc.NewServer(opts...)
 
 	endpointParts := strings.Split(*d.endpoint, ":")
@@ -84,13 +109,21 @@ func (d *Driver) Run() error {
 		return fmt.Errorf("error while registering with kubelet: %v", err)
 	}
 
+	klog.V(4).Infof("RegisterIdentiyServer")
+
 	csi.RegisterIdentityServer(d.server, d)
+	klog.V(4).Infof("RegisterControllerServer")
 	csi.RegisterControllerServer(d.server, d)
+	klog.V(4).Infof("RegisterNodeServer")
 	csi.RegisterNodeServer(d.server, d)
+
+	klog.V(4).Infof("Starting normal server")
 
 	ch := make(chan os.Signal, 1)
 	go handleSignals(ch, listener)
 	signal.Notify(ch, os.Interrupt)
+
+	klog.V(4).Infof("Starting CSI grpc server")
 
 	err = d.server.Serve(listener)
 	if err != nil {
@@ -159,7 +192,8 @@ func (d *Driver) NodeGetInfo(_ context.Context, r *csi.NodeGetInfoRequest) (*csi
 	klog.V(10).Infof("NodeGetInfo: request %v", r)
 
 	return &csi.NodeGetInfoResponse{
-		NodeId: *d.nodeID,
+		NodeId:            *d.nodeID,
+		MaxVolumesPerNode: 100000,
 	}, nil
 }
 
@@ -171,16 +205,25 @@ func (d *Driver) NodeGetCapabilities(_ context.Context, r *csi.NodeGetCapabiliti
 	}, nil
 }
 
+// socketCleanup removes any initial unix://
+func socketCleanup(s string) string {
+	return strings.TrimPrefix(s, "unix:/")
+}
+
 // GetInfo is the RPC invoked by plugin watcher
 func (d *Driver) GetInfo(_ context.Context, r *pluginregistration.InfoRequest) (*pluginregistration.PluginInfo, error) {
 	klog.V(10).Infof("GetInfo: request %v", r)
 
-	return &pluginregistration.PluginInfo{
+	responsePluginInfo := pluginregistration.PluginInfo{
 		Type:              pluginregistration.CSIPlugin,
 		Name:              DRIVERNAME,
-		Endpoint:          *d.endpoint,
+		Endpoint:          socketCleanup(*d.endpoint), //*d.endpoint,
 		SupportedVersions: VERSIONS,
-	}, nil
+	}
+
+	klog.V(10).Infof("GetInfo: response %v", responsePluginInfo)
+
+	return &responsePluginInfo, nil
 }
 
 func (d *Driver) NotifyRegistrationStatus(_ context.Context, r *pluginregistration.RegistrationStatus) (*pluginregistration.RegistrationStatusResponse, error) {
