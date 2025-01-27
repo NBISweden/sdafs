@@ -52,6 +52,7 @@ var once sync.Once
 
 // CacheBlock is used to keep track of cached data
 type CacheBlock struct {
+	key    *string
 	start  uint64
 	length uint64
 	data   []byte
@@ -246,9 +247,10 @@ func (r *HTTPReader) isInCache(offset uint64) bool {
 		"key", key)
 
 	cache.Wait()
-	entry, found := cache.Get(r.getCacheKey(offset))
 
-	if found && offset >= entry.start && offset < (entry.start+entry.length) {
+	entry, found := cache.Get(key)
+
+	if found && *entry.key == key && offset >= entry.start && offset < (entry.start+entry.length) {
 
 		slog.Log(context.Background(),
 			traceLevel,
@@ -322,7 +324,9 @@ func (r *HTTPReader) prefetchAt(waitBefore time.Duration, offset uint64) {
 		return
 	}
 
-	r.addToCache(&CacheBlock{offset, uint64(len(prefetchedData)), prefetchedData})
+	r.addToCache(&CacheBlock{start: offset,
+		length: uint64(len(prefetchedData)),
+		data:   prefetchedData})
 }
 
 func (r *HTTPReader) Seek(offset int64, whence int) (int64, error) {
@@ -390,6 +394,7 @@ func (r *HTTPReader) addToCache(cacheBlock *CacheBlock) {
 		"key", r.getCacheKey(cacheBlock.start))
 
 	key := r.getCacheKey(cacheBlock.start)
+	cacheBlock.key = &key
 
 	cache.SetWithTTL(key, cacheBlock, int64(cacheBlock.length), cacheLifeTime)
 }
@@ -498,7 +503,7 @@ func (r *HTTPReader) Read(dst []byte) (n int, err error) {
 	// Worth waiting for quiescence if we can skip a fetch
 	cache.Wait()
 	p, found := cache.Get(key)
-	if found &&
+	if found && *p.key == key &&
 		(start >= p.start && start < p.start+p.length) {
 		// At least part of the data is here
 
@@ -560,7 +565,9 @@ func (r *HTTPReader) Read(dst []byte) (n int, err error) {
 
 	// Add to cache
 	cacheBytes := bytes.Clone(data)
-	r.addToCache(&CacheBlock{start, uint64(len(cacheBytes)), cacheBytes})
+	r.addToCache(&CacheBlock{start: start,
+		length: uint64(len(cacheBytes)),
+		data:   cacheBytes})
 
 	b := bytes.NewBuffer(data)
 	n, err = b.Read(dst)
