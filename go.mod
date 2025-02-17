@@ -12,11 +12,11 @@ require (
 	github.com/sevlyar/go-daemon v0.1.6
 	github.com/stretchr/testify v1.10.0
 	github.com/tj/assert v0.0.3
-	google.golang.org/grpc v1.69.4
-	google.golang.org/protobuf v1.36.3
+	google.golang.org/grpc v1.70.0
+	google.golang.org/protobuf v1.36.5
 	gopkg.in/ini.v1 v1.67.0
 	k8s.io/klog/v2 v2.130.1
-	k8s.io/kubelet v0.32.1
+	k8s.io/kubelet v0.32.2
 )
 
 require (
