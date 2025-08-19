@@ -666,7 +666,11 @@ func (s *SDAfs) setup() error {
 	}
 
 	currentUser, err := user.Current()
-	s.runAs = idToNum(currentUser.Uid)
+	if err == nil {
+		s.runAs = idToNum(currentUser.Uid)
+	} else {
+		s.runAs = 0
+	}
 
 	if err == nil {
 		s.Owner = idToNum(currentUser.Uid)
