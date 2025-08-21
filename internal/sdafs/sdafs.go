@@ -154,7 +154,7 @@ func (s *SDAfs) GetFileSystemServer() fuse.Server {
 // readToken extracts the token from the credentials file
 func (s *SDAfs) readToken() error {
 	if s.conf == nil {
-		return fmt.Errorf("No configuration provided")
+		return fmt.Errorf("no configuration provided")
 	}
 
 	s.tokenLoadTime = time.Now()
@@ -162,7 +162,7 @@ func (s *SDAfs) readToken() error {
 	f, err := ini.Load(s.conf.CredentialsFile)
 
 	if err != nil {
-		return fmt.Errorf("Error while opening credentials file %s: %v",
+		return fmt.Errorf("error while opening credentials file %s: %v",
 			s.conf.CredentialsFile,
 			err)
 	}
@@ -175,7 +175,7 @@ func (s *SDAfs) readToken() error {
 		}
 	}
 
-	return fmt.Errorf("No access token found in %s", s.conf.CredentialsFile)
+	return fmt.Errorf("no access token found in %s", s.conf.CredentialsFile)
 }
 
 func (s *SDAfs) doRequest(relPath, method string) (*http.Response, error) {
@@ -183,14 +183,14 @@ func (s *SDAfs) doRequest(relPath, method string) (*http.Response, error) {
 	reqURL, err := url.JoinPath(s.conf.RootURL, relPath)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"Couldn't make full URL from root %s relative %s: %v",
+			"couldn't make full URL from root %s relative %s: %v",
 			s.conf.RootURL, relPath, err)
 	}
 
 	req, err := http.NewRequest(method, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"Couldn't make request for %s: %v",
+			"couldn't make request for %s: %v",
 			reqURL, err)
 	}
 
@@ -247,14 +247,14 @@ func (s *SDAfs) getDatasets() error {
 
 	if err != nil {
 		return fmt.Errorf(
-			"Error while making dataset request: %v",
+			"error while making dataset request: %v",
 			err)
 
 	}
 
 	if r.StatusCode != http.StatusOK {
 		return fmt.Errorf(
-			"Dataset request didn't return 200, we got %d",
+			"dataset request didn't return 200, we got %d",
 			r.StatusCode)
 	}
 
@@ -264,14 +264,14 @@ func (s *SDAfs) getDatasets() error {
 	text, err := io.ReadAll(r.Body)
 	if err != nil {
 		return fmt.Errorf(
-			"Error while reading dataset response: %v",
+			"error while reading dataset response: %v",
 			err)
 	}
 
 	err = json.Unmarshal(text, &s.datasets)
 	if err != nil {
 		return fmt.Errorf(
-			"Error while doing unmarshal of dataset list %v: %v",
+			"error while doing unmarshal of dataset list %v: %v",
 			text, err)
 	}
 
