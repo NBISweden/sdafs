@@ -1,0 +1,126 @@
+---
+
+# StorageClass for SDA
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: sdafs
+provisioner: csi.sda.nbis.se
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: false
+parameters:
+  # PVC should point to a secret where we can get the token
+  csi.storage.k8s.io/secret-namespace: "${pvc.namespace}"
+  csi.storage.k8s.io/secret-name: "${pvc.annotations['sdafs/token-secret']}"
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: csi-attacher-sdafs-sa
+  namespace: kube-system
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-attacher-sdafs-cr
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "update", "patch", "create"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "update", "patch", "create"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments", "volumeattachments/status"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "update", "patch", "create"]
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-attacher-role-binding
+subjects:
+  - kind: ServiceAccount
+    name: csi-attacher-sdafs-sa
+    namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: csi-attacher-sdafs-cr
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: csi-attacher-sdafs
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: csi-sdafs
+  template:
+    metadata:
+      labels:
+        app: csi-sdafs
+    spec:
+      serviceAccount: csi-attacher-sdafs-sa
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: "Exists"
+      containers:
+        - name: csi-attacher
+          image: registry.k8s.io/sig-storage/csi-attacher:v4.9.0
+          args:
+            - "--v=4"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
+          env:
+            - name: ADDRESS
+              value: /var/lib/kubelet/plugins/csi.sda.nbis.se/csi.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/kubelet/plugins/csi.sda.nbis.se
+        - name: csi-provisioner
+          image: registry.k8s.io/sig-storage/csi-provisioner:v5.3.0
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v=4"
+            - "--leader-election"
+          env:
+            - name: ADDRESS
+              value: /var/lib/kubelet/plugins/csi.sda.nbis.se/csi.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/kubelet/plugins/csi.sda.nbis.se
+      volumes:
+        - name: socket-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/csi.sda.nbis.se
+            type: DirectoryOrCreate
