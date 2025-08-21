@@ -28,7 +28,7 @@ builds:
       - -s -w -X main.Version={{ .Tag }}
 archives:
   - id: sdafs
-    builds:
+    ids:
       - sdafs
     name_template: >-
       sdafs_
@@ -39,10 +39,11 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
 
   - id: csi-driver
-    builds:
+    ids:
       - csi-driver
     name_template: >-
       csi-driver_
@@ -53,4 +54,5 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+        - zip

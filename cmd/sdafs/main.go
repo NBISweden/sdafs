@@ -29,9 +29,12 @@ var Version string = "development"
 
 // usage prints usage and version for the benefit of the user
 func usage() {
-	fmt.Fprintf(flag.CommandLine.Output(),
+	_, err := fmt.Fprintf(flag.CommandLine.Output(),
 		"Usage: %s [FLAGS...] mountpoint\n\nSupported flags are:\n\n",
 		os.Args[0])
+	if err != nil {
+		panic("the world is unreliable, we can't go on")
+	}
 	flag.PrintDefaults()
 	fmt.Printf("\nsdafs version: %s\n\n", Version)
 	os.Exit(1)

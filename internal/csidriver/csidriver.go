@@ -34,13 +34,13 @@ func (d *Driver) registerKubelet() error {
 	listener, err := net.Listen(endpointParts[0], endpointParts[1])
 
 	if err != nil {
-		return fmt.Errorf("Error while setting up listen for grpc: %v", err)
+		return fmt.Errorf("error while setting up listen for grpc: %v", err)
 	}
 
 	go func() {
 		err := csiServer.Serve(listener)
 		if err != nil {
-			klog.Errorf("Serving of registration GRPC failed: %v", err)
+			klog.Errorf("serving of registration GRPC failed: %v", err)
 		}
 	}()
 
@@ -71,17 +71,17 @@ func (d *Driver) Run() error {
 	listener, err := net.Listen(endpointParts[0], endpointParts[1])
 
 	if err != nil {
-		return fmt.Errorf("Error while setting up listen for grpc: %v", err)
+		return fmt.Errorf("error while setting up listen for grpc: %v", err)
 	}
 
 	// Close (remove) when we're done
-	defer listener.Close()
+	defer listener.Close() // nolint:errcheck
 
 	klog.V(4).Infof("Registering")
 
 	err = d.registerKubelet()
 	if err != nil {
-		return fmt.Errorf("Error while registering with kubelet: %v", err)
+		return fmt.Errorf("error while registering with kubelet: %v", err)
 	}
 
 	csi.RegisterIdentityServer(d.server, d)
@@ -95,7 +95,7 @@ func (d *Driver) Run() error {
 	err = d.server.Serve(listener)
 	if err != nil {
 		klog.Errorf("Serving stopped with error %v", err)
-		return fmt.Errorf("Serving failed: %v", err)
+		return fmt.Errorf("serving failed: %v", err)
 	}
 
 	return nil
@@ -187,7 +187,7 @@ func (d *Driver) NotifyRegistrationStatus(_ context.Context, r *pluginregistrati
 	klog.V(10).Infof("GetInfo: request %v", r)
 
 	if !r.PluginRegistered {
-		klog.Error(fmt.Errorf("Registration process failed, bailing out. The error was :%v", r.Error))
+		klog.Error(fmt.Errorf("registration process failed, bailing out. The error was :%v", r.Error))
 		os.Exit(1)
 	}
 

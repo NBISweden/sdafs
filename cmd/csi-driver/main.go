@@ -10,9 +10,12 @@ import (
 )
 
 func usage() {
-	fmt.Fprintf(flag.CommandLine.Output(),
+	_, err := fmt.Fprintf(flag.CommandLine.Output(),
 		"Usage: %s [FLAGS...] mountpoint\n\nSupported flags are:\n\n",
 		os.Args[0])
+	if err != nil {
+		panic("the world is unreliable, we can't go on")
+	}
 	flag.PrintDefaults()
 	os.Exit(0)
 }

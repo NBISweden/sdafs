@@ -168,7 +168,7 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 	req, err := http.NewRequest("GET", useURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"Couldn't make request for %s: %v",
+			"couldn't make request for %s: %v",
 			r.fileURL, err)
 	}
 
@@ -190,7 +190,7 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 	resp, err := r.conf.Client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"Error while making request for %s: %v",
+			"error while making request for %s: %v",
 			r.fileURL, err)
 	}
 	duration := time.Since(beforeRequest)
@@ -209,12 +209,12 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 		errData, err := io.ReadAll(resp.Body)
 
 		retErr := fmt.Errorf(
-			"Unexpected status code for request for %s: %d (%s)",
+			"unexpected status code for request for %s: %d (%s)",
 			r.fileURL, resp.StatusCode, string(errData))
 
 		if err != nil {
 			retErr = fmt.Errorf(
-				"Unexpected status code for request for %s: %d "+
+				"unexpected status code for request for %s: %d "+
 					"(no more information, got %v while trying to read)",
 				r.fileURL, resp.StatusCode, err)
 		}
@@ -337,11 +337,11 @@ func (r *HTTPReader) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case io.SeekStart:
 		if offset < 0 {
-			return iCurrent, fmt.Errorf("Invalid offset %v- can't be negative when seeking from start", offset)
+			return iCurrent, fmt.Errorf("invalid offset %v- can't be negative when seeking from start", offset)
 		}
 		// #nosec G115
 		if offset > int64(r.objectSize) {
-			return iCurrent, fmt.Errorf("Invalid offset %v - beyond end of object (size %v)", offset, r.objectSize)
+			return iCurrent, fmt.Errorf("invalid offset %v - beyond end of object (size %v)", offset, r.objectSize)
 		}
 
 		r.currentOffset = uint64(offset)
@@ -351,11 +351,11 @@ func (r *HTTPReader) Seek(offset int64, whence int) (int64, error) {
 
 	case io.SeekCurrent:
 		if iCurrent+offset < 0 {
-			return iCurrent, fmt.Errorf("Invalid offset %v from %v would be be before start", offset, r.currentOffset)
+			return iCurrent, fmt.Errorf("invalid offset %v from %v would be be before start", offset, r.currentOffset)
 		}
 		// #nosec G115
 		if offset > int64(r.objectSize) {
-			return iCurrent, fmt.Errorf("Invalid offset - %v from %v would end up beyond of object %v", offset, r.currentOffset, r.objectSize)
+			return iCurrent, fmt.Errorf("invalid offset - %v from %v would end up beyond of object %v", offset, r.currentOffset, r.objectSize)
 		}
 
 		r.currentOffset = uint64(int64(r.currentOffset) + offset) // #nosec G115
@@ -366,12 +366,12 @@ func (r *HTTPReader) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekEnd:
 		// #nosec G115
 		if int64(r.objectSize)+offset < 0 {
-			return iCurrent, fmt.Errorf("Invalid offset %v from end in %v bytes object, would be before file start", offset, r.objectSize)
+			return iCurrent, fmt.Errorf("invalid offset %v from end in %v bytes object, would be before file start", offset, r.objectSize)
 		}
 
 		// #nosec G115
 		if int64(r.objectSize)+offset > int64(r.objectSize) {
-			return iCurrent, fmt.Errorf("Invalid offset %v from end in %v bytes object", offset, r.objectSize)
+			return iCurrent, fmt.Errorf("invalid offset %v from end in %v bytes object", offset, r.objectSize)
 		}
 
 		r.currentOffset = uint64(int64(r.objectSize) + offset) // #nosec G115
@@ -380,7 +380,7 @@ func (r *HTTPReader) Seek(offset int64, whence int) (int64, error) {
 		return int64(r.currentOffset), nil // #nosec G115
 	}
 
-	return iCurrent, fmt.Errorf("Bad whence")
+	return iCurrent, fmt.Errorf("bad whence")
 }
 
 // addToCache adds a prefetch to the list of outstanding prefetches once it's no longer active
