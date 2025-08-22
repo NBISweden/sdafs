@@ -1,5 +1,4 @@
 ---
-
 # StorageClass for SDA
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -15,7 +14,6 @@ parameters:
   csi.storage.k8s.io/secret-name: "${pvc.annotations['sdafs/token-secret']}"
 
 ---
-
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -23,7 +21,6 @@ metadata:
   namespace: kube-system
 
 ---
-
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -58,7 +55,6 @@ rules:
     verbs: ["get", "list", "watch", "update", "patch", "create"]
 
 ---
-
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -73,7 +69,6 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 
 ---
-
 kind: DaemonSet
 apiVersion: apps/v1
 metadata:
