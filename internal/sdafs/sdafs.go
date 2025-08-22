@@ -284,7 +284,6 @@ type datasetFile struct {
 	DecryptedFileSize         uint64 `json:"decryptedFileSize"`
 	DecryptedFileChecksum     string `json:"decryptedFileChecksum"`
 	DecryptedFileChecksumType string `json:"decryptedFileChecksumType"`
-	FileStatus                string `json:"fileStatus"`
 	FileSize                  uint64 `json:"fileSize"`
 	CreatedAt                 string `json:"createdAt"`
 	LastModified              string `json:"lastModified"`
@@ -390,14 +389,17 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 	}
 
 	// Until the archive presents the view they want to expose
-	for i := range contents {
-		fp := contents[i].FilePath
-		_, fpnew, found := strings.Cut(fp, "/")
+	// we leave this here as a reminder for now, the archive used to present an
+	// extra level in the metadata that had to be removed
 
-		if found {
-			contents[i].FilePath = fpnew
-		}
-	}
+	// for i := range contents {
+	// 	fp := contents[i].FilePath
+	// 	_, fpnew, found := strings.Cut(fp, "/")
+
+	// 	if found {
+	// 		contents[i].FilePath = fpnew
+	// 	}
+	// }
 
 	return contents, nil
 }
@@ -523,9 +525,6 @@ func (s *SDAfs) trimNames(contents []datasetFile) {
 func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 	entry datasetFile,
 	dataSetName string) {
-	if entry.FileStatus != "ready" {
-		return
-	}
 
 	split := strings.Split(entry.FilePath, "/")
 
@@ -589,19 +588,28 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 
 	// The directory structure should exist now
 
-	mtime, err := time.Parse(time.RFC3339, entry.LastModified)
-	if err != nil {
-		slog.Error("Error while decoding modified timestamp",
-			"fileid", entry.FileID,
-			"timestamp", entry.LastModified,
-			"error", err)
+	mtime := s.startTime
+	ctime := s.startTime
+	var err error
+
+	if len(entry.LastModified) > 0 {
+		mtime, err = time.Parse(time.RFC3339, entry.LastModified)
+		if err != nil {
+			slog.Error("Error while decoding modified timestamp",
+				"fileid", entry.FileID,
+				"timestamp", entry.LastModified,
+				"error", err)
+		}
 	}
-	ctime, err := time.Parse(time.RFC3339, entry.CreatedAt)
-	if err != nil {
-		slog.Error("Error while decoding created timestamp",
-			"fileid", entry.FileID,
-			"timestamp", entry.CreatedAt,
-			"error", err)
+
+	if len(entry.CreatedAt) > 0 {
+		ctime, err = time.Parse(time.RFC3339, entry.CreatedAt)
+		if err != nil {
+			slog.Error("Error while decoding created timestamp",
+				"fileid", entry.FileID,
+				"timestamp", entry.CreatedAt,
+				"error", err)
+		}
 	}
 
 	dirName := filepath.Join(split[:len(split)-1]...)

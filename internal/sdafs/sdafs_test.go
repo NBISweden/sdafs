@@ -155,34 +155,25 @@ func TestDatasetLoad(t *testing.T) {
 		httpmock.NewStringResponder(200, `[
 		{ "fileId": "1", 
 			"filePath":"/file1",
-			"fileSize": 14000,
-			"fileStatus": "ready",
-			"lastModified": "2023-12-08T15:12:13.06156Z",
-			"createdAt": "2023-12-08T15:12:13.06156Z"
+			"fileSize": 14000
 		}, 
 		{ "fileId": "2", 
 			"filePath":"/dir1/file2",
-			"fileSize": 1000,
-			"fileStatus": "ready",
-			"lastModified": "2023-12-08T15:12:13.06156Z",
-			"createdAt": "2023-12-08T15:12:13.06156Z"
+			"fileSize": 1000
 		},
 		{ "fileId": "3", 
 			"filePath":"/dir1/file3",
-			"fileSize": 1000,
-			"fileStatus": "pending",
-			"lastModified": "2023-12-08T15:12:13.06156Z",
-			"createdAt": "2023-12-08T15:12:13.06156Z"
+			"fileSize": 1000
 		}
 
 			]`))
 	err = sda.checkLoaded(sda.inodes[4])
 	assert.Nil(t, err, "Unexpected error")
-	assert.Equal(t, 6, len(sda.inodes), "inodes in sda is unexpected length")
+	assert.Equal(t, 7, len(sda.inodes), "inodes in sda is unexpected length")
 
 	// Repeat should just return directly with the same visible result
 	err = sda.checkLoaded(sda.inodes[4])
 	assert.Nil(t, err, "Unexpected error")
-	assert.Equal(t, 6, len(sda.inodes), "inodes in sda is unexpected length")
+	assert.Equal(t, 7, len(sda.inodes), "inodes in sda is unexpected length")
 
 }
