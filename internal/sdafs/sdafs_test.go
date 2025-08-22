@@ -169,11 +169,11 @@ func TestDatasetLoad(t *testing.T) {
 			]`))
 	err = sda.checkLoaded(sda.inodes[4])
 	assert.Nil(t, err, "Unexpected error")
-	assert.Equal(t, 7, len(sda.inodes), "inodes in sda is unexpected length")
+	assert.Equal(t, 8, len(sda.inodes), "inodes in sda is unexpected length")
 
 	// Repeat should just return directly with the same visible result
 	err = sda.checkLoaded(sda.inodes[4])
 	assert.Nil(t, err, "Unexpected error")
-	assert.Equal(t, 7, len(sda.inodes), "inodes in sda is unexpected length")
+	assert.Equal(t, 8, len(sda.inodes), "inodes in sda is unexpected length")
 
 }
