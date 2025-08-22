@@ -65,7 +65,7 @@ func (d *Driver) registerKubelet() error {
 	pluginregistration.RegisterRegistrationServer(csiServer, d)
 
 	go func() {
-		defer listener.Close()
+		defer listener.Close() // nolint:errcheck
 
 		err := csiServer.Serve(listener)
 		if err != nil {
@@ -79,7 +79,6 @@ func (d *Driver) registerKubelet() error {
 // volumeInfo keeps
 type volumeInfo struct {
 	attached bool
-	pid      int
 	secret   string
 	ID       string
 	path     string
@@ -147,8 +146,8 @@ func (d *Driver) Run() error {
 	}
 
 	// Close (remove) when we're done
-	defer os.Remove(address)
-	defer listener.Close() // nolint:errcheck
+	defer os.Remove(address) // nolint:errcheck
+	defer listener.Close()   // nolint:errcheck
 
 	klog.V(4).Infof("Registering")
 
@@ -196,8 +195,14 @@ func handleSignals(c chan os.Signal, l net.Listener) {
 
 		// Remove socket
 
-		if l.Addr().Network() == "unix" {
-			os.Remove(l.Addr().String())
+		if l.Addr().Network() != "unix" {
+			os.Exit(0)
+		}
+
+		err = os.Remove(l.Addr().String())
+		if err != nil {
+			klog.Errorf("Removing socket file %s failed: %v", l.Addr().String(), err)
+			os.Exit(1)
 		}
 
 		os.Exit(0)
@@ -285,11 +290,8 @@ func getControllerCapabilites() (c []*csi.ControllerServiceCapability) {
 }
 
 func (d *Driver) ControllerGetCapabilities(_ context.Context, r *csi.ControllerGetCapabilitiesRequest) (*csi.ControllerGetCapabilitiesResponse, error) {
-
 	resp := &csi.ControllerGetCapabilitiesResponse{
 		Capabilities: getControllerCapabilites()}
-
-	klog.V(20).Infof("ControllerGetCapabilitiesetInfo: responding %v", *resp)
 
 	return resp, nil
 }
