@@ -15,7 +15,6 @@ RUN --mount=type=cache,target=/root/.cache/go-build  go build -buildvcs=false ./
 
 USER 65534
 
-#FROM "golang:1.24-bullseye"
 FROM scratch
 HEALTHCHECK NONE
 COPY --from=build /build/sdafs /sdafs
