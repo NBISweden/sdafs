@@ -59,6 +59,11 @@ apiVersion: apps/v1
 metadata:
   name: csi-attacher-sdafs
   namespace: kube-system
+  annotations:
+    checkov.io/skip1: CKV_K8S_9=No good probes available
+    checkov.io/skip2: CKV_K8S_8=No good probes available
+    checkov.io/skip3: CKV_K8S_38=Is this probe broken?
+    checkov.io/skip4: CKV_K8S_43=Prefer non-digests here
 spec:
   selector:
     matchLabels:
@@ -69,6 +74,12 @@ spec:
         app: csi-sdafs
     spec:
       serviceAccount: csi-attacher-sdafs-sa
+      automountServiceAccountToken: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 65534
+        runAsGroup: 65535
       tolerations:
         - key: node-role.kubernetes.io/master
           operator: "Exists"
@@ -79,26 +90,60 @@ spec:
             - "--v=4"
             - "--csi-address=$(ADDRESS)"
             - "--leader-election"
+            - "--http-endpoint=:4002"
           env:
             - name: ADDRESS
               value: /var/lib/kubelet/plugins/csi.sda.nbis.se/csi.sock
-          imagePullPolicy: "IfNotPresent"
+          imagePullPolicy: Always
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/kubelet/plugins/csi.sda.nbis.se
+          resources:
+            requests:
+              memory: "100Mi"
+              cpu: "0.01"
+            limits:
+              cpu: "0.1"
+              memory: "1Gi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - all
         - name: csi-provisioner
           image: registry.k8s.io/sig-storage/csi-provisioner:v5.3.0
           args:
             - "--csi-address=$(ADDRESS)"
             - "--v=4"
             - "--leader-election"
+            - "--http-endpoint=:4001"
+            - "--controller-publish-readonly=true"
+            - "--node-deployment=true"
           env:
             - name: ADDRESS
               value: /var/lib/kubelet/plugins/csi.sda.nbis.se/csi.sock
-          imagePullPolicy: "IfNotPresent"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          imagePullPolicy: Always
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/kubelet/plugins/csi.sda.nbis.se
+          resources:
+            requests:
+              memory: "100Mi"
+              cpu: "0.01"
+            limits:
+              cpu: "0.1"
+              memory: "1Gi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - all
       volumes:
         - name: socket-dir
           hostPath:
