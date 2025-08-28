@@ -10,10 +10,10 @@ require (
 	github.com/neicnordic/crypt4gh v1.14.0
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/sevlyar/go-daemon v0.1.6
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	github.com/tj/assert v0.0.3
 	google.golang.org/grpc v1.75.0
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/protobuf v1.36.8
 	gopkg.in/ini.v1 v1.67.0
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kubelet v0.33.4
