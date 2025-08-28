@@ -35,7 +35,7 @@ func (d *Driver) NodePublishVolume(_ context.Context, r *csi.NodePublishVolumeRe
 		return nil, status.Error(codes.Unauthenticated, "No 'token' in secrets received")
 	}
 
-	vol := &volumeInfo{ID: r.GetVolumeId(), secret: token, path: r.GetTargetPath()}
+	vol := &volumeInfo{ID: r.GetVolumeId(), secret: token, path: r.GetTargetPath(), context: r.GetVolumeContext()}
 	d.volumes[r.GetVolumeId()] = vol
 
 	err := d.writeToken(vol)
