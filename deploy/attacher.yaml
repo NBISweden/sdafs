@@ -1,19 +1,4 @@
 ---
-# StorageClass for SDA
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: sdafs
-provisioner: csi.sda.nbis.se
-reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstConsumer
-allowVolumeExpansion: false
-parameters:
-  # PVC should point to a secret where we can get the token
-  csi.storage.k8s.io/secret-namespace: "${pvc.namespace}"
-  csi.storage.k8s.io/secret-name: "${pvc.annotations['sdafs/token-secret']}"
-
----
 apiVersion: v1
 kind: ServiceAccount
 metadata:
