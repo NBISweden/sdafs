@@ -82,6 +82,7 @@ type volumeInfo struct {
 	secret   string
 	ID       string
 	path     string
+	context  map[string]string
 }
 
 // Driver is the main information bearer. We use a single struct for different
@@ -320,11 +321,20 @@ func (d *Driver) CreateVolume(_ context.Context, r *csi.CreateVolumeRequest) (*c
 		return nil, status.Error(codes.InvalidArgument, "Invalid name in request")
 	}
 
+	context := make(map[string]string)
+	possibleParameters := []string{"chunksize", "rootURL", "cachesize", "maxretries"}
+	for _, p := range possibleParameters {
+		value, found := r.GetParameters()[p]
+		if found {
+			context[p] = value
+		}
+	}
+
 	return &csi.CreateVolumeResponse{
 		Volume: &csi.Volume{
 			VolumeId:      name,
 			CapacityBytes: 0,
-			VolumeContext: nil,
+			VolumeContext: context,
 		},
 	}, nil
 

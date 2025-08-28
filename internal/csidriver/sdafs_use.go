@@ -62,6 +62,13 @@ func (d *Driver) doMount(v *volumeInfo) error {
 		logName := path.Join(*d.logDir, v.ID+".log")
 		args = append(args, "--log="+logName)
 	}
+
+	for _, k := range []string{"chunksize", "cachesize", "rootURL", "maxretries"} {
+		if v, ok := v.context[k]; ok {
+			args = append(args, "--"+k, v)
+		}
+	}
+
 	args = append(args, v.path)
 
 	klog.V(10).Infof("Mounting sdafs at %s", v.path)
