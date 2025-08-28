@@ -68,10 +68,12 @@ spec:
   selector:
     matchLabels:
       app: csi-sdafs
+      role: systemservices
   template:
     metadata:
       labels:
         app: csi-sdafs
+        role: systemservices
     spec:
       serviceAccount: csi-attacher-sdafs-sa
       automountServiceAccountToken: true

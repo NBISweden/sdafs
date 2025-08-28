@@ -39,3 +39,21 @@ spec:
       ports:
         - protocol: UDP
           port: 53
+
+---
+
+# Attacher and provisioner should not talk to any network services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: csi-sdafs-systemservices-np
+spec:
+  podSelector:
+    matchLabels:
+      app: csi-sdafs
+      role: systemservices
+  policyTypes:
+    - Ingress
+    - Egress
+  egress: []
+  ingress: []
