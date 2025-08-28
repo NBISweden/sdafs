@@ -70,17 +70,21 @@ func main() {
 		*endpoint, *nodeID, *registrationEndpoint)
 
 	cont, err := csidriver.CheckSocket(endpoint)
-	if !cont {
+	if !cont && err != nil {
 		klog.Fatalf("Problem with socket path %s: %v", *endpoint, err)
 	}
 
 	cont, err = csidriver.CheckSocket(registrationEndpoint)
-	if !cont {
+	if !cont && err != nil {
 		klog.Fatalf("Problem with socket path %s: %v", *registrationEndpoint, err)
 	}
 
-	d := csidriver.NewDriver(endpoint, nodeID, registrationEndpoint, tokenDir,
+	d, err := csidriver.NewDriver(endpoint, nodeID, registrationEndpoint, tokenDir,
 		sdafsPath, logDir)
+	if err != nil {
+		klog.Fatalf("Failed setting up driver: %v", err)
+	}
+
 	err = d.Run()
 	klog.V(0).Infof("CSI driver run failed: %v", err)
 
