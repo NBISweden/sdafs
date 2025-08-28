@@ -6,7 +6,9 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"os/user"
 	"path"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -62,6 +64,14 @@ func (d *Driver) registerKubelet() error {
 		return fmt.Errorf("error while setting up listen for grpc: %v", err)
 	}
 
+	if d.myUid == 0 && network == "unix" {
+		err = os.Chmod(address, 0o0777)
+
+		if err != nil {
+			return fmt.Errorf("can't make socket accessible: %v", err)
+		}
+	}
+
 	pluginregistration.RegisterRegistrationServer(csiServer, d)
 
 	go func() {
@@ -97,11 +107,25 @@ type Driver struct {
 	tokenDir                        *string
 	sdafsPath                       *string
 	logDir                          *string
+	myUid                           int
 }
 
 // NewDriver returns a Driver object. Since the volumes map should be
 // initiaalised NewDriver should be used.
-func NewDriver(endpoint, nodeID, kubeletSocket, tokenDir, sdafsPath, logDir *string) *Driver {
+func NewDriver(endpoint, nodeID, kubeletSocket, tokenDir, sdafsPath, logDir *string) (*Driver, error) {
+
+	currentUser, err := user.Current()
+
+	if err != nil {
+		return nil, fmt.Errorf("don't even know who I am: %v", err)
+	}
+
+	uid, err := strconv.Atoi(currentUser.Uid)
+	if err != nil {
+		return nil, fmt.Errorf("converting Uid string %s failed: %v",
+			currentUser.Uid, err)
+	}
+
 	return &Driver{
 		endpoint:      endpoint,
 		nodeID:        nodeID,
@@ -110,7 +134,8 @@ func NewDriver(endpoint, nodeID, kubeletSocket, tokenDir, sdafsPath, logDir *str
 		tokenDir:      tokenDir,
 		sdafsPath:     sdafsPath,
 		logDir:        logDir,
-	}
+		myUid:         uid,
+	}, nil
 }
 
 func (d *Driver) Run() error {
@@ -144,6 +169,14 @@ func (d *Driver) Run() error {
 
 	if err != nil {
 		return fmt.Errorf("error while setting up listen for grpc: %v", err)
+	}
+
+	if d.myUid == 0 && network == "unix" {
+		err = os.Chmod(address, 0o0777)
+
+		if err != nil {
+			return fmt.Errorf("can't make socket accessible: %v", err)
+		}
 	}
 
 	// Close (remove) when we're done
