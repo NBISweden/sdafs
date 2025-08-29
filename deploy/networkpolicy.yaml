@@ -41,7 +41,6 @@ spec:
           port: 53
 
 ---
-
 # Attacher and provisioner should not talk to any network services
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
