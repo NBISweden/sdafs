@@ -1,0 +1,45 @@
+misconfigurations:
+  - id: AVD-KSV-0001
+    paths:
+      - deploy/attacher.yaml
+      - deploy/csi-sdafs.yaml
+  - id: AVD-KSV-0017
+    paths:
+      - deploy/attacher.yaml
+      - deploy/csi-sdafs.yaml
+  - id: AVD-KSV-0020
+    paths:
+      - deploy/attacher.yaml
+      - deploy/csi-sdafs.yaml
+  - id: AVD-KSV-0021
+    paths:
+      - deploy/attacher.yaml
+      - deploy/csi-sdafs.yaml
+  - id: AVD-KSV-0105
+    paths:
+      - deploy/attacher.yaml
+      - deploy/csi-sdafs.yaml
+  - id: AVD-KSV-0116
+    paths:
+      - deploy/attacher.yaml
+      - deploy/csi-sdafs.yaml
+  - id: AVD-KSV-0023
+    paths:
+      - deploy/attacher.yaml
+      - deploy/csi-sdafs.yaml
+  - id: AVD-KSV-0037
+    paths:
+      - deploy/attacher.yaml
+      - deploy/csi-sdafs.yaml
+  - id: AVD-KSV-0012
+    paths:
+      - deploy/attacher.yaml
+      - deploy/csi-sdafs.yaml
+  - id: AVD-KSV-0041
+    paths:
+      - deploy/attacher.yaml
+      - deploy/csi-sdafs.yaml
+  - id: AVD-KSV-0125
+    paths:
+      - deploy/attacher.yaml
+      - deploy/csi-sdafs.yaml
