@@ -1,44 +1,40 @@
 misconfigurations:
+  # Prvivilege escalation is required because privileged is required
+  # due to bidirectional mount propagation
   - id: AVD-KSV-0001
     paths:
-      - deploy/attacher.yaml
       - deploy/csi-sdafs.yaml
+  # Privileged is required to allow bidirectional mount propagation
   - id: AVD-KSV-0017
     paths:
-      - deploy/attacher.yaml
       - deploy/csi-sdafs.yaml
+  # Running as root required to create/access pod directories
   - id: AVD-KSV-0020
     paths:
-      - deploy/attacher.yaml
       - deploy/csi-sdafs.yaml
-  - id: AVD-KSV-0021
-    paths:
-      - deploy/attacher.yaml
-      - deploy/csi-sdafs.yaml
+  # Running as root required to create/access pod directories
   - id: AVD-KSV-0105
     paths:
-      - deploy/attacher.yaml
       - deploy/csi-sdafs.yaml
-  - id: AVD-KSV-0116
-    paths:
-      - deploy/attacher.yaml
-      - deploy/csi-sdafs.yaml
+  # hostPath required to interact with kubleet and provide mount functionality
   - id: AVD-KSV-0023
     paths:
       - deploy/attacher.yaml
       - deploy/csi-sdafs.yaml
+  # These are system services
   - id: AVD-KSV-0037
     paths:
       - deploy/attacher.yaml
       - deploy/csi-sdafs.yaml
+  # Running as root required to access/create pod directories
   - id: AVD-KSV-0012
     paths:
-      - deploy/attacher.yaml
       - deploy/csi-sdafs.yaml
+  # Provisioner needs access to secrets
   - id: AVD-KSV-0041
     paths:
       - deploy/attacher.yaml
-      - deploy/csi-sdafs.yaml
+  # Images not published in those registries for now
   - id: AVD-KSV-0125
     paths:
       - deploy/attacher.yaml

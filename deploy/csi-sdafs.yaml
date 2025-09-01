@@ -31,7 +31,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
         runAsUser: 0
-        runAsGroup: 0
+        runAsGroup: 65535
       containers:
         - name: csi-sdafs
           securityContext:
@@ -48,7 +48,7 @@ spec:
             limits:
               cpu: "2"
               memory: "8Gi"
-          image: pfreyhult/sdafs:slasktest1
+          image: ghcr.io/nbisweden/sdafs:latest
           imagePullPolicy: IfNotPresent
           args:
             - "--csi-address=$(CSI_ENDPOINT)"

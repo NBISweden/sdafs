@@ -102,12 +102,14 @@ spec:
               mountPath: /var/lib/kubelet/plugins/csi.sda.nbis.se
           resources:
             requests:
-              memory: "100Mi"
+              # Seems to use roughly 10 Mbyte in test environment
+              memory: "128Mi"
               cpu: "0.01"
             limits:
               cpu: "0.1"
               memory: "1Gi"
           securityContext:
+            runAsNonRoot: true
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
@@ -135,12 +137,14 @@ spec:
               mountPath: /var/lib/kubelet/plugins/csi.sda.nbis.se
           resources:
             requests:
-              memory: "100Mi"
+              # Seems to use roughly 10 Mbyte in test environment
+              memory: "128Mi"
               cpu: "0.01"
             limits:
               cpu: "0.1"
               memory: "1Gi"
           securityContext:
+            runAsNonRoot: true
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
