@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc"
@@ -108,11 +109,42 @@ type Driver struct {
 	sdafsPath                       *string
 	logDir                          *string
 	myUid                           int
+
+	mounter      func(*Driver, *volumeInfo) error
+	unmounter    func(*Driver, *volumeInfo) error
+	writeToken   func(*Driver, *volumeInfo) error
+	isMountPoint func(*Driver, *volumeInfo) bool
+	maxWaitMount time.Duration
+	waitPeriod   time.Duration
+}
+
+type CSIConfig struct {
+	Endpoint             *string
+	NodeID               *string
+	RegistrationEndpoint *string
+	TokenDir             *string
+	LogDir               *string
+	SdafsPath            *string
 }
 
 // NewDriver returns a Driver object. Since the volumes map should be
 // initiaalised NewDriver should be used.
-func NewDriver(endpoint, nodeID, kubeletSocket, tokenDir, sdafsPath, logDir *string) (*Driver, error) {
+func NewDriver(config *CSIConfig) (*Driver, error) {
+
+	for _, path := range []string{*config.Endpoint,
+		*config.RegistrationEndpoint} {
+
+		cont, err := checkSocket(&path)
+		if !cont && err == nil {
+			return nil, fmt.Errorf("aborting since something responds on %s",
+				path)
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("problem with socket path %s: %v",
+				path, err)
+		}
+	}
 
 	currentUser, err := user.Current()
 
@@ -127,14 +159,20 @@ func NewDriver(endpoint, nodeID, kubeletSocket, tokenDir, sdafsPath, logDir *str
 	}
 
 	return &Driver{
-		endpoint:      endpoint,
-		nodeID:        nodeID,
-		kubeletSocket: kubeletSocket,
+		endpoint:      config.Endpoint,
+		nodeID:        config.NodeID,
+		kubeletSocket: config.RegistrationEndpoint,
 		volumes:       make(map[string]*volumeInfo),
-		tokenDir:      tokenDir,
-		sdafsPath:     sdafsPath,
-		logDir:        logDir,
+		tokenDir:      config.TokenDir,
+		sdafsPath:     config.SdafsPath,
+		logDir:        config.LogDir,
 		myUid:         uid,
+		mounter:       doMount,
+		unmounter:     unmount,
+		writeToken:    writeToken,
+		isMountPoint:  isMountPoint,
+		waitPeriod:    10 * time.Millisecond,
+		maxWaitMount:  60 * time.Second,
 	}, nil
 }
 

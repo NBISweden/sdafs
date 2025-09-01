@@ -14,14 +14,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-const maxWaitMount = 60 * time.Second
-const waitPeriod = 10 * time.Millisecond
-
 func (d *Driver) getTokenfilePath(v *volumeInfo) string {
 	return path.Join(*d.tokenDir, "token-"+v.ID)
 }
 
-func (d *Driver) writeToken(v *volumeInfo) error {
+func writeToken(d *Driver, v *volumeInfo) error {
 
 	f, err := os.CreateTemp(*d.tokenDir, "")
 
@@ -45,13 +42,13 @@ func (d *Driver) ensureTargetDir(v *volumeInfo) error {
 	return os.MkdirAll(v.path, 0o700)
 }
 
-func (d *Driver) doMount(v *volumeInfo) error {
+func doMount(d *Driver, v *volumeInfo) error {
 
 	// It seems we might get called again even if we think we have correctly
 	// mounted and replied so. As a workaround, we start by checking if the
 	// requested path is a mountpoint and decide it's good if that's the case
 
-	if d.isMountPoint(v) {
+	if d.isMountPoint(d, v) {
 		klog.V(10).Infof("Request for already mounted path at %s, considering good", v.path)
 		return nil
 	}
@@ -115,24 +112,24 @@ func (d *Driver) doMount(v *volumeInfo) error {
 		return fmt.Errorf("error while running sdafs: %v", err)
 	}
 
-	waited := 0 * waitPeriod
+	waited := 0 * d.waitPeriod
 
-	for !d.isMountPoint(v) && waited < maxWaitMount {
-		time.Sleep(waitPeriod)
-		waited += waitPeriod
+	for !d.isMountPoint(d, v) && waited < d.maxWaitMount {
+		time.Sleep(d.waitPeriod)
+		waited += d.waitPeriod
 	}
 
-	if d.isMountPoint(v) {
+	if d.isMountPoint(d, v) {
 		klog.V(10).Infof("Filesystem mounted at : %s", v.path)
 		return nil
 	}
-	klog.V(10).Infof("Filesystem wasn't mounted after %v, giving up", maxWaitMount)
+	klog.V(10).Infof("Filesystem wasn't mounted after %v, giving up", d.maxWaitMount)
 
-	return fmt.Errorf("filesystem didn't mount after %v", maxWaitMount)
+	return fmt.Errorf("filesystem didn't mount after %v", d.maxWaitMount)
 
 }
 
-func (d *Driver) isMountPoint(v *volumeInfo) bool {
+func isMountPoint(d *Driver, v *volumeInfo) bool {
 
 	var stat unix.Stat_t
 	err := unix.Stat(v.path, &stat)
@@ -159,7 +156,7 @@ func (d *Driver) isMountPoint(v *volumeInfo) bool {
 	return false
 }
 
-func (d *Driver) unmount(v *volumeInfo) error {
+func unmount(d *Driver, v *volumeInfo) error {
 	// If mountpoint isn't there, not much to do
 
 	var stat unix.Stat_t
@@ -175,7 +172,7 @@ func (d *Driver) unmount(v *volumeInfo) error {
 	klog.V(10).Infof("unmounting %s", v.path)
 	err = unix.Unmount(v.path, unix.MNT_DETACH)
 
-	if err != nil && d.isMountPoint(v) {
+	if err != nil && d.isMountPoint(d, v) {
 		// Only fail if we have an actual mount point
 
 		// Only fail here if we have an actual mount point

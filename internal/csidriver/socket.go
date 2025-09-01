@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func CheckSocket(s *string) (bool, error) {
+func checkSocket(s *string) (bool, error) {
 
 	network := "unix"
 	var address string
@@ -27,7 +27,6 @@ func CheckSocket(s *string) (bool, error) {
 	}
 
 	sockStat, err := os.Stat(address)
-
 	if err != nil {
 		// Treat any error for stat as non-existant and fine
 		return true, nil
@@ -52,5 +51,4 @@ func CheckSocket(s *string) (bool, error) {
 	}
 
 	return true, nil
-
 }

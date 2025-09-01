@@ -10,15 +10,15 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func usage() {
+func usage(exit int) {
 	_, err := fmt.Fprintf(flag.CommandLine.Output(),
-		"Usage: %s [FLAGS...] mountpoint\n\nSupported flags are:\n\n",
+		"Usage: %s [FLAGS...]\n\nSupported flags are:\n\n",
 		os.Args[0])
 	if err != nil {
 		panic("the world is unreliable, we can't go on")
 	}
 	flag.PrintDefaults()
-	os.Exit(0)
+	os.Exit(exit)
 }
 
 func sdafsPathDefault() string {
@@ -31,9 +31,8 @@ func sdafsPathDefault() string {
 	return c
 }
 
-func main() {
-	klog.InitFlags(nil)
-
+func getConfig() *csidriver.CSIConfig {
+	m := csidriver.CSIConfig{}
 	endpointDefault := os.Getenv("CSI_ENDPOINT")
 	if endpointDefault == "" {
 		endpointDefault = "unix:///var/lib/kubelet/plugins/csi.sda.nbis.se/csi.sock"
@@ -48,41 +47,38 @@ func main() {
 
 	help := flag.Bool("help", false, "Show usage")
 
-	endpoint := flag.String("csi-address", endpointDefault, "CSI Endpoint")
-	nodeID := flag.String("node-id", nodeIDDefault,
+	m.Endpoint = flag.String("csi-address", endpointDefault, "CSI Endpoint")
+	m.NodeID = flag.String("node-id", nodeIDDefault,
 		"node-id to report in NodeGetInfo RPC")
-	registrationEndpoint := flag.String("registrationendpoint", registrationEndpointDefault,
+	m.RegistrationEndpoint = flag.String("registrationendpoint", registrationEndpointDefault,
 		"Kubelet device plugin registration socket")
 
-	tokenDir := flag.String("tokendir", "/tmp", "Where to store temporary files for tokens")
-	logDir := flag.String("sdafslogdir", "/tmp", "Where to create logfiles for sdafs, none if empty")
+	m.TokenDir = flag.String("tokendir", "/tmp", "Where to store temporary files for tokens")
+	m.LogDir = flag.String("sdafslogdir", "/tmp", "Where to create logfiles for sdafs, none if empty")
 
-	sdafsPath := flag.String("sdafspath", sdafsPathDefault(), "Path to call sdafs")
+	m.SdafsPath = flag.String("sdafspath", sdafsPathDefault(), "Path to call sdafs")
 
 	flag.Parse()
 
 	if *help {
-		usage()
+		usage(0)
 	}
 
 	klog.V(3).Infof(
 		"Configuration: CSI Endpoint: %s, NodeId: %s, Kubelet socket: %s",
-		*endpoint, *nodeID, *registrationEndpoint)
+		*m.Endpoint, *m.NodeID, *m.RegistrationEndpoint)
 
-	cont, err := csidriver.CheckSocket(endpoint)
-	if !cont && err != nil {
-		klog.Fatalf("Problem with socket path %s: %v", *endpoint, err)
-	}
+	return &m
+}
 
-	cont, err = csidriver.CheckSocket(registrationEndpoint)
-	if !cont && err != nil {
-		klog.Fatalf("Problem with socket path %s: %v", *registrationEndpoint, err)
-	}
+func main() {
+	klog.InitFlags(nil)
 
-	d, err := csidriver.NewDriver(endpoint, nodeID, registrationEndpoint, tokenDir,
-		sdafsPath, logDir)
+	config := getConfig()
+
+	d, err := csidriver.NewDriver(config)
 	if err != nil {
-		klog.Fatalf("Failed setting up driver: %v", err)
+		klog.Fatalf("Failed setting up sdafs CSI driver: %v", err)
 	}
 
 	err = d.Run()

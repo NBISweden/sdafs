@@ -38,13 +38,14 @@ func (d *Driver) NodePublishVolume(_ context.Context, r *csi.NodePublishVolumeRe
 	vol := &volumeInfo{ID: r.GetVolumeId(), secret: token, path: r.GetTargetPath(), context: r.GetVolumeContext()}
 	d.volumes[r.GetVolumeId()] = vol
 
-	err := d.writeToken(vol)
+	err := d.writeToken(d, vol)
 	if err != nil {
 		klog.V(10).Infof("NodePublishVolume: couldn't write token secret for mounter, giving up: %v", err)
 		return nil, status.Error(codes.Unknown, fmt.Sprintf("Token creation failed: %v", err))
 	}
 
-	err = d.doMount(vol)
+	err = d.mounter(d, vol)
+
 	if err != nil {
 		klog.V(10).Infof("NodePublishVolume: couldn't mount sdafs, giving up: %v", err)
 		return nil, status.Error(codes.Unknown, fmt.Sprintf("sdafs mount failed: %v", err))
@@ -62,7 +63,7 @@ func (d *Driver) NodeUnpublishVolume(_ context.Context, r *csi.NodeUnpublishVolu
 		d.volumes[r.GetVolumeId()] = vol
 	}
 
-	err := d.unmount(vol)
+	err := d.unmounter(d, vol)
 
 	if err != nil {
 		klog.V(10).Infof("NodeUnpublishVolume: unmount for %s failed: %v", vol.path, err)

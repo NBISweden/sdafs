@@ -7,6 +7,7 @@ toolchain go1.24.2
 require (
 	github.com/container-storage-interface/spec v1.11.0
 	github.com/dgraph-io/ristretto/v2 v2.2.0
+	github.com/google/uuid v1.6.0
 	github.com/jacobsa/fuse v0.0.0-20250702080931-3e9d24d5e3ff
 	github.com/jarcoal/httpmock v1.4.1
 	github.com/neicnordic/crypt4gh v1.14.0
