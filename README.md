@@ -17,8 +17,13 @@ datasets
 
 ### CSI
 
-We also aim to provide a CSI to allow usage with kubernetes. This is still
-work in progress and should not be expected to be usable at this point in time.
+We also provide a CSI to allow usage with kubernetes. Due to its nature,
+providing system services this likely needs exceptions/acknowledgements from
+security monitoring/admission systems.
+
+The files in `deploy` provide samples that can be used for deploying in testing
+environment. We strongly recommend going through them to understand what
+components are involved and what privileges they run with.
 
 ## Usage
 
