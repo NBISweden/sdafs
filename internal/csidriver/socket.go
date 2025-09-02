@@ -28,7 +28,7 @@ func checkSocket(s *string) (bool, error) {
 
 	sockStat, err := os.Stat(address)
 	if err != nil {
-		// Treat any error for stat as non-existant and fine
+		// Treat any error for stat as non-existent and fine
 		return true, nil
 	}
 
