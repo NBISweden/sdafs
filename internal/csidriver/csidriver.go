@@ -421,7 +421,7 @@ func (d *Driver) CreateVolume(_ context.Context,
 	}, nil
 }
 
-// DeleteVolume is called through grpc t
+// DeleteVolume is called through grpc to initiate removal of a volume
 // TODO: Should we go through the work to check if the volume is mounted
 // and fail if that's the case. We don't want to persist things and I think
 // kubernetes should manage that iself
