@@ -10,11 +10,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func (d *Driver) NodeGetInfo(_ context.Context, r *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
+const maxVolumesPerNodeDefault = 100000
 
+func (d *Driver) NodeGetInfo(_ context.Context, r *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
 	return &csi.NodeGetInfoResponse{
 		NodeId:            *d.nodeID,
-		MaxVolumesPerNode: 100000,
+		MaxVolumesPerNode: maxVolumesPerNodeDefault,
 	}, nil
 }
 
