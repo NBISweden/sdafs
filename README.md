@@ -142,7 +142,7 @@ The sdafs CSI driver can also be run "outside" of kubernetes. It must still
 be run with access to the respective host mount namespace (i.e. typically
 alongside `kubelet`). Similarly, using a provisioner is still mandatory.
 
-### Token provisioning
+### Credentials provisioning
 
 The csi-provisioner as used will manage secret provisioning when configured in
 the `StorageClass` (see `deploy/storageclass.yaml` for an example). This allows
