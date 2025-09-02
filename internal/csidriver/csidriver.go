@@ -85,6 +85,7 @@ type Driver struct {
 	csi.UnimplementedIdentityServer
 	csi.UnimplementedControllerServer
 	csi.UnimplementedNodeServer
+	pluginregistration.UnimplementedRegistrationServer
 	endpoint, nodeID, registrationEndpoint *string
 	server                                 *grpc.Server
 	volumes                                map[string]*volumeInfo
