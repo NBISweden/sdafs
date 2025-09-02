@@ -23,8 +23,10 @@ import (
 	pluginregistration "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
 )
 
+// DRIVERNAME is our name in the CSI world, should match what's in other places
 const DRIVERNAME = "csi.sda.nbis.se"
 
+// VERSIONS are the supported CSI versions, only one for now
 var VERSIONS = []string{"1.0.0"}
 
 // registerKubelet registers the driver within kubelet
@@ -32,33 +34,14 @@ func (d *Driver) registerKubelet() error {
 
 	klog.V(8).Infof("Registering CSI driver with kubelet")
 
-	opts := []grpc.ServerOption{
-		grpc.UnaryInterceptor(
-			func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-				klog.V(10).Infof("Call on kubelet registration socket, request: %T", req)
+	csiServer := makeGrpcServer("kubelet registration")
 
-				logger := klog.FromContext(ctx)
-				resp, err = handler(klog.NewContext(ctx, logger), req)
-
-				return resp, err
-			}),
-	}
-	csiServer := grpc.NewServer(opts...)
-
-	kubeletSocketPath := "unix:///var/lib/kubelet/plugins/kubelet.sock"
-	if d.kubeletSocket != nil {
-		kubeletSocketPath = *d.kubeletSocket
+	registrationEndpointPath := "unix:///var/lib/kubelet/plugins/kubelet.sock"
+	if d.registrationEndpoint != nil {
+		registrationEndpointPath = *d.registrationEndpoint
 	}
 
-	var network, address string
-	network = "unix"
-	address = kubeletSocketPath
-
-	endpointParts := strings.Split(kubeletSocketPath, ":")
-	if len(endpointParts) > 1 {
-		network = endpointParts[0]
-		address = endpointParts[1]
-	}
+	network, address := endpointToNetworkAddress(registrationEndpointPath)
 	listener, err := net.Listen(network, address)
 
 	if err != nil {
@@ -87,7 +70,7 @@ func (d *Driver) registerKubelet() error {
 	return nil
 }
 
-// volumeInfo keeps
+// volumeInfo keeps information about a volume
 type volumeInfo struct {
 	attached bool
 	secret   string
@@ -96,19 +79,19 @@ type volumeInfo struct {
 	context  map[string]string
 }
 
-// Driver is the main information bearer. We use a single struct for different
-// "roles" of servers we offer
+// Driver is the main information bearer internally. We use a single struct for
+// different "roles" of servers we offer
 type Driver struct {
 	csi.UnimplementedIdentityServer
 	csi.UnimplementedControllerServer
 	csi.UnimplementedNodeServer
-	endpoint, nodeID, kubeletSocket *string
-	server                          *grpc.Server
-	volumes                         map[string]*volumeInfo
-	tokenDir                        *string
-	sdafsPath                       *string
-	logDir                          *string
-	myUid                           int
+	endpoint, nodeID, registrationEndpoint *string
+	server                                 *grpc.Server
+	volumes                                map[string]*volumeInfo
+	tokenDir                               *string
+	sdafsPath                              *string
+	logDir                                 *string
+	myUid                                  int
 
 	mounter      func(*Driver, *volumeInfo) error
 	unmounter    func(*Driver, *volumeInfo) error
@@ -118,6 +101,7 @@ type Driver struct {
 	waitPeriod   time.Duration
 }
 
+// CSIConfig is the incomning configuration for the driver
 type CSIConfig struct {
 	Endpoint             *string
 	NodeID               *string
@@ -130,19 +114,22 @@ type CSIConfig struct {
 // NewDriver returns a Driver object. Since the volumes map should be
 // initiaalised NewDriver should be used.
 func NewDriver(config *CSIConfig) (*Driver, error) {
+	for _, path := range []*string{config.Endpoint,
+		config.RegistrationEndpoint} {
 
-	for _, path := range []string{*config.Endpoint,
-		*config.RegistrationEndpoint} {
+		if path == nil {
+			return nil, fmt.Errorf("missing socket configuration")
+		}
 
-		cont, err := checkSocket(&path)
+		cont, err := checkSocket(path)
 		if !cont && err == nil {
 			return nil, fmt.Errorf("aborting since something responds on %s",
-				path)
+				*path)
 		}
 
 		if err != nil {
 			return nil, fmt.Errorf("problem with socket path %s: %v",
-				path, err)
+				*path, err)
 		}
 	}
 
@@ -159,50 +146,64 @@ func NewDriver(config *CSIConfig) (*Driver, error) {
 	}
 
 	return &Driver{
-		endpoint:      config.Endpoint,
-		nodeID:        config.NodeID,
-		kubeletSocket: config.RegistrationEndpoint,
-		volumes:       make(map[string]*volumeInfo),
-		tokenDir:      config.TokenDir,
-		sdafsPath:     config.SdafsPath,
-		logDir:        config.LogDir,
-		myUid:         uid,
-		mounter:       doMount,
-		unmounter:     unmount,
-		writeToken:    writeToken,
-		isMountPoint:  isMountPoint,
-		waitPeriod:    10 * time.Millisecond,
-		maxWaitMount:  60 * time.Second,
+		endpoint:             config.Endpoint,
+		nodeID:               config.NodeID,
+		registrationEndpoint: config.RegistrationEndpoint,
+		volumes:              make(map[string]*volumeInfo),
+		tokenDir:             config.TokenDir,
+		sdafsPath:            config.SdafsPath,
+		logDir:               config.LogDir,
+		myUid:                uid,
+		mounter:              doMount,
+		unmounter:            unmount,
+		writeToken:           writeToken,
+		isMountPoint:         isMountPoint,
+		waitPeriod:           10 * time.Millisecond,
+		maxWaitMount:         60 * time.Second,
 	}, nil
 }
 
-func (d *Driver) Run() error {
-	klog.V(4).Infof("Starting CSI")
+func endpointToNetworkAddress(s string) (string, string) {
+	network := "unix"
+	address := s
 
-	opts := []grpc.ServerOption{grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		klog.V(10).Infof("Call to CSI socket, request type %T", req)
-
-		logger := klog.FromContext(ctx)
-		resp, err = handler(klog.NewContext(ctx, logger), req)
-		if err != nil {
-			klog.V(8).Infof("Responded with error: %v", err)
-		}
-		return resp, err
-	}),
-	}
-	d.server = grpc.NewServer(opts...)
-
-	var network, address string
-
-	endpointParts := strings.Split(*d.endpoint, ":")
+	endpointParts := strings.Split(s, ":")
 	if len(endpointParts) > 1 {
 		network = endpointParts[0]
 		address = endpointParts[1]
 	} else {
-		network = "unix"
 		address = endpointParts[0]
 	}
 
+	return network, address
+}
+
+func makeGrpcServer(serverName string) *grpc.Server {
+	opts := []grpc.ServerOption{grpc.UnaryInterceptor(
+		func(ctx context.Context, req interface{},
+			_ *grpc.UnaryServerInfo,
+			handler grpc.UnaryHandler) (resp interface{}, err error) {
+			klog.V(10).Infof("Call to %s, request type %T", serverName, req)
+
+			logger := klog.FromContext(ctx)
+			resp, err = handler(klog.NewContext(ctx, logger), req)
+			if err != nil {
+				klog.V(8).Infof("Responded with error: %v", err)
+			}
+			return resp, err
+		}),
+	}
+
+	return grpc.NewServer(opts...)
+}
+
+// Run setups and launches the main grpc server
+func (d *Driver) Run() error {
+	klog.V(4).Infof("Starting CSI")
+
+	d.server = makeGrpcServer("CSI socket")
+
+	network, address := endpointToNetworkAddress(*d.endpoint)
 	listener, err := net.Listen(network, address)
 
 	if err != nil {
@@ -221,7 +222,7 @@ func (d *Driver) Run() error {
 	defer os.Remove(address) // nolint:errcheck
 	defer listener.Close()   // nolint:errcheck
 
-	klog.V(4).Infof("Registering")
+	klog.V(4).Infof("Registering with kubelet")
 
 	err = d.registerKubelet()
 	if err != nil {
@@ -229,7 +230,6 @@ func (d *Driver) Run() error {
 	}
 
 	klog.V(4).Infof("RegisterIdentiyServer")
-
 	csi.RegisterIdentityServer(d.server, d)
 	klog.V(4).Infof("RegisterControllerServer")
 	csi.RegisterControllerServer(d.server, d)
@@ -254,6 +254,7 @@ func (d *Driver) Run() error {
 	return nil
 }
 
+// handleSignals waits for signals and closes down/cleans up when received
 func handleSignals(c chan os.Signal, l net.Listener) {
 	for {
 		s := <-c
@@ -273,7 +274,9 @@ func handleSignals(c chan os.Signal, l net.Listener) {
 
 		err = os.Remove(l.Addr().String())
 		if err != nil {
-			klog.Errorf("Removing socket file %s failed: %v", l.Addr().String(), err)
+			klog.Errorf("Removing socket file %s failed: %v",
+				l.Addr().String(),
+				err)
 			os.Exit(1)
 		}
 
@@ -281,12 +284,14 @@ func handleSignals(c chan os.Signal, l net.Listener) {
 	}
 }
 
-// Identity interface implementation
-func (d *Driver) GetPluginCapabilities(_ context.Context, r *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse, error) {
+// GetPluginCapabilities returns the capabilities of the service
+func (d *Driver) GetPluginCapabilities(_ context.Context,
+	r *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse,
+	error) {
 
 	return &csi.GetPluginCapabilitiesResponse{
 		Capabilities: []*csi.PluginCapability{
-			&csi.PluginCapability{
+			{
 				Type: &csi.PluginCapability_Service_{
 					Service: &csi.PluginCapability_Service{
 						Type: csi.PluginCapability_Service_CONTROLLER_SERVICE,
@@ -296,7 +301,9 @@ func (d *Driver) GetPluginCapabilities(_ context.Context, r *csi.GetPluginCapabi
 	}, nil
 }
 
-func (d *Driver) GetPluginInfo(_ context.Context, r *csi.GetPluginInfoRequest) (*csi.GetPluginInfoResponse, error) {
+// GetPluginInfo returns the plugin information
+func (d *Driver) GetPluginInfo(_ context.Context,
+	r *csi.GetPluginInfoRequest) (*csi.GetPluginInfoResponse, error) {
 
 	return &csi.GetPluginInfoResponse{
 		Name:          "csi.sda.nbis.se",
@@ -304,36 +311,36 @@ func (d *Driver) GetPluginInfo(_ context.Context, r *csi.GetPluginInfoRequest) (
 	}, nil
 }
 
-func (d *Driver) driverReady() bool {
-	return true
-}
-
+// Probe returns whatever the service is ready
 func (d *Driver) Probe(_ context.Context, r *csi.ProbeRequest) (*csi.ProbeResponse, error) {
 
 	return &csi.ProbeResponse{
-		Ready: wrapperspb.Bool(d.driverReady()),
+		Ready: wrapperspb.Bool(true),
 	}, nil
 }
 
-// socketCleanup removes any initial unix:
-func socketCleanup(s string) string {
+// socketNameCleanup removes any initial unix: and makes the path look nicer
+func socketNameCleanup(s string) string {
 	return path.Clean(strings.TrimPrefix(s, "unix:/"))
 }
 
 // GetInfo is the RPC invoked by plugin watcher
-func (d *Driver) GetInfo(_ context.Context, r *pluginregistration.InfoRequest) (*pluginregistration.PluginInfo, error) {
+func (d *Driver) GetInfo(_ context.Context,
+	r *pluginregistration.InfoRequest) (*pluginregistration.PluginInfo, error) {
 
 	responsePluginInfo := pluginregistration.PluginInfo{
 		Type:              pluginregistration.CSIPlugin,
 		Name:              DRIVERNAME,
-		Endpoint:          socketCleanup(*d.endpoint),
+		Endpoint:          socketNameCleanup(*d.endpoint),
 		SupportedVersions: VERSIONS,
 	}
 
 	return &responsePluginInfo, nil
 }
 
-func (d *Driver) NotifyRegistrationStatus(_ context.Context, r *pluginregistration.RegistrationStatus) (*pluginregistration.RegistrationStatusResponse, error) {
+// NotifyRegistrationStatus is called when we are registered
+func (d *Driver) NotifyRegistrationStatus(_ context.Context,
+	r *pluginregistration.RegistrationStatus) (*pluginregistration.RegistrationStatusResponse, error) {
 
 	if !r.PluginRegistered {
 		klog.Error(fmt.Errorf("registration process failed, hoping for retry. The error was :%v", r.Error))
@@ -342,6 +349,8 @@ func (d *Driver) NotifyRegistrationStatus(_ context.Context, r *pluginregistrati
 	return &pluginregistration.RegistrationStatusResponse{}, nil
 }
 
+// getControllerCapabilities is a helper function to generate a suitable
+// capability list
 func getControllerCapabilites() (c []*csi.ControllerServiceCapability) {
 
 	for _, capability := range []csi.ControllerServiceCapability_RPC_Type{
@@ -361,14 +370,21 @@ func getControllerCapabilites() (c []*csi.ControllerServiceCapability) {
 	return c
 }
 
-func (d *Driver) ControllerGetCapabilities(_ context.Context, r *csi.ControllerGetCapabilitiesRequest) (*csi.ControllerGetCapabilitiesResponse, error) {
+// ControllerGetCapabilities is called through grpc and responds with our
+// capabilities
+func (d *Driver) ControllerGetCapabilities(_ context.Context,
+	r *csi.ControllerGetCapabilitiesRequest) (
+	*csi.ControllerGetCapabilitiesResponse, error) {
 	resp := &csi.ControllerGetCapabilitiesResponse{
 		Capabilities: getControllerCapabilites()}
 
 	return resp, nil
 }
 
-func (d *Driver) CreateVolume(_ context.Context, r *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
+// CreateVolume is called through grpc to go through the CSI parts to create
+// a volume
+func (d *Driver) CreateVolume(_ context.Context,
+	r *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 
 	caps := r.GetVolumeCapabilities()
 	if caps == nil {
@@ -382,7 +398,6 @@ func (d *Driver) CreateVolume(_ context.Context, r *csi.CreateVolumeRequest) (*c
 			am.GetMode() != csi.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY {
 			klog.V(10).Infof("Unsupported requested capability %v", cap.AccessMode)
 			return nil, status.Error(codes.PermissionDenied, "Only read-only is supported")
-
 		}
 	}
 
@@ -408,17 +423,25 @@ func (d *Driver) CreateVolume(_ context.Context, r *csi.CreateVolumeRequest) (*c
 			VolumeContext: context,
 		},
 	}, nil
-
 }
 
-func (d *Driver) DeleteVolume(_ context.Context, r *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
-
+// DeleteVolume is called through grpc t
+// TODO: Should we go through the work to check if the volume is mounted
+// and fail if that's the case. We don't want to persist things and I think
+// kubernetes should manage that iself
+func (d *Driver) DeleteVolume(_ context.Context, r *csi.DeleteVolumeRequest) (
+	*csi.DeleteVolumeResponse, error) {
 	klog.V(10).Infof("Delete request for %s", r.GetVolumeId())
 
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
-func (d *Driver) ControllerModifyVolume(_ context.Context, r *csi.ControllerModifyVolumeRequest) (*csi.ControllerModifyVolumeResponse, error) {
+// ControllerModifyVolume is called through grpc upon changes, currently
+// not implemented
+// TODO: Can we get notified on updates to the secret?
+func (d *Driver) ControllerModifyVolume(_ context.Context,
+	r *csi.ControllerModifyVolumeRequest) (
+	*csi.ControllerModifyVolumeResponse, error) {
 
 	return &csi.ControllerModifyVolumeResponse{}, nil
 }

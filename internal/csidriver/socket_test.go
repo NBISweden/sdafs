@@ -57,7 +57,7 @@ func TestCheckSocket(t *testing.T) {
 	listener, err = net.Listen("unix", socketPath)
 	assert.Equal(t, nil, err, "Unexpected error from net Listen")
 
-	go serviceListener(t, listener)
+	go serviceListener(listener)
 
 	defer os.Remove(socketPath) // nolint:errcheck
 	cont, err = checkSocket(&socketPath)
@@ -65,7 +65,7 @@ func TestCheckSocket(t *testing.T) {
 	assert.Equal(t, nil, err, "Unexpected error from checkSocket")
 }
 
-func serviceListener(t *testing.T, l net.Listener) {
+func serviceListener(l net.Listener) {
 	l.Accept() // nolint:errcheck
 	l.Close()  // nolint:errcheck
 }
