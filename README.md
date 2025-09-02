@@ -15,7 +15,6 @@ This should be usable. There are some possible improvements regarding cache
 handling that can be done and it hasn't currently been tested for very large
 datasets
 
-
 ## Usage
 
 To be usable, you need to have been granted access to datasets, for bigpicture
@@ -92,9 +91,12 @@ To use sdafs within kubernetes, a setup is needed that provides the roles of
 attacher and provisioner as traditional for CSI (an example of configuration
 for these is available in `deploy/attacher.yaml`).
 
-At least one `storageClass` resource must also be created with `provisioner` set
+At least one `StorageClass` resource must also be created with `provisioner` set
 to `csi.sda.nbis.se`. `deploy/storageclass.yaml` has an example that also
 demonstrates various options that can be used.
+
+A typical setup will need roles and permissions as per configured in
+`deploy/attacher.yaml`.
 
 #### Running sdafs CSI inside Kubernetes
 
@@ -130,7 +132,7 @@ security policies, these are:
   - `/dev/fuse`
     - Needed for integration with the FUSE kernel portions
 
-There is a `Dockerfile` in the repo for building container images with minimal
+There is a `Dockerfile` in the repository for building container images with minimal
 extra contents and images should be published to the `ghcr.io/nbisweden/sdafs`
 repository upon releases.
 
@@ -139,3 +141,25 @@ repository upon releases.
 The sdafs CSI driver can also be run "outside" of kubernetes. It must still
 be run with access to the respective host mount namespace (i.e. typically
 alongside `kubelet`). Similarly, using a provisioner is still mandatory.
+
+### Token provisioning
+
+The csi-provisioner as used will manage secret provisioning when configured in
+the `StorageClass` (see `deploy/storageclass.yaml` for an example). This allows
+a flexible way of providing secrets with the ability to use templates.
+
+The example `StorageClass` menioned will look for a `Secret` in the same
+namespace as the `PersistantVolumeClaim` the provisioner is trying to satisfy,
+as for the actual name of the `Secret`, the example will pick that up from
+annotations to the `PersistantVolumeClaim` (expecting an annotation
+`sda.nbis.se/token-secret`, but that is also configurable). Similarly to how
+the `StorageClass` allows specifying what `Secret` to pick up the credentials
+from, it also allows you to specify what key in the `Secret` to use by
+passing a `tokenkey` (defaults to `token`)
+
+The appointed `Secret` will be searched for the key mentioned above. The value
+will be used to create the file with credentals information passed to `sdafs`.
+
+Using templates in `StorageClass` allows for very flexible scenarios, e.g.
+having multple `PersistantVolumeClaim`s in a namespace using credentials
+provided by different `Secret`s.
