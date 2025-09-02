@@ -32,7 +32,7 @@ func checkSocket(s *string) (bool, error) {
 		return true, nil
 	}
 
-	if fs.ModeSocket == (sockStat.Mode() & fs.ModeSocket) {
+	if (sockStat.Mode() & fs.ModeSocket) == fs.ModeSocket {
 		// Socket
 		_, err = net.Dial("unix", address)
 		if err == nil {
