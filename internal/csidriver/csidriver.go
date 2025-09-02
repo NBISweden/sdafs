@@ -26,8 +26,8 @@ import (
 // DRIVERNAME is our name in the CSI world, should match what's in other places
 const DRIVERNAME = "csi.sda.nbis.se"
 
-// VERSIONS are the supported CSI versions, only one for now
-var VERSIONS = []string{"1.0.0"}
+// VERSIONS are the supported CSI versions
+var VERSIONS = []string{"1.11.0", "1.0.0"}
 
 // registerKubelet registers the driver within kubelet
 func (d *Driver) registerKubelet() error {
