@@ -225,7 +225,7 @@ func (d *Driver) Run() error {
 		return fmt.Errorf("error while registering with kubelet: %v", err)
 	}
 
-	klog.V(4).Infof("RegisterIdentiyServer")
+	klog.V(4).Infof("RegisterIdentityServer")
 	csi.RegisterIdentityServer(d.server, d)
 	klog.V(4).Infof("RegisterControllerServer")
 	csi.RegisterControllerServer(d.server, d)
