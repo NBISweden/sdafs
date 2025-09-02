@@ -672,6 +672,8 @@ func (s *SDAfs) setup() error {
 		s.Group = idToNum(currentUser.Gid)
 	} else {
 		s.runAs = 0
+		s.Owner = 0
+		s.Group = 0
 	}
 
 	if s.conf.SpecifyUID {
