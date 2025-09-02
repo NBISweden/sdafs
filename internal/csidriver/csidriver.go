@@ -302,7 +302,7 @@ func (d *Driver) GetPluginInfo(_ context.Context,
 	r *csi.GetPluginInfoRequest) (*csi.GetPluginInfoResponse, error) {
 
 	return &csi.GetPluginInfoResponse{
-		Name:          "csi.sda.nbis.se",
+		Name:          DRIVERNAME,
 		VendorVersion: "0.0.1",
 	}, nil
 }
