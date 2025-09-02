@@ -108,7 +108,7 @@ func doMount(d *Driver, v *volumeInfo) error {
 	err = c.Wait()
 	if err != nil {
 		klog.V(10).Infof("Output (stdout) from broken sdafs run: %s", outMsg)
-		klog.V(10).Infof("Output (sterr) from broken sdafs run: %s", errorMsg)
+		klog.V(10).Infof("Output (stderr) from broken sdafs run: %s", errorMsg)
 		return fmt.Errorf("error while running sdafs: %v", err)
 	}
 
