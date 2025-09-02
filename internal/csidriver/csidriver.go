@@ -403,7 +403,7 @@ func (d *Driver) CreateVolume(_ context.Context,
 	}
 
 	context := make(map[string]string)
-	possibleParameters := []string{"chunksize", "rootURL", "cachesize", "maxretries"}
+	possibleParameters := []string{"chunksize", "rootURL", "cachesize", "maxretries", "tokenkey"}
 	for _, p := range possibleParameters {
 		value, found := r.GetParameters()[p]
 		if found {

@@ -26,13 +26,20 @@ func (d *Driver) NodeGetCapabilities(_ context.Context, r *csi.NodeGetCapabiliti
 }
 
 func (d *Driver) NodePublishVolume(_ context.Context, r *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
-
 	secrets := r.GetSecrets()
-	token, ok := secrets["token"]
+
+	tokenKey := "token"
+
+	fromContext, found := r.GetVolumeContext()["tokenkey"]
+	if found {
+		tokenKey = fromContext
+	}
+
+	token, ok := secrets[tokenKey]
 
 	if !ok {
-		klog.V(10).Infof("NodePublishVolume: secret 'token' missing so can't authenticate, giving up")
-		return nil, status.Error(codes.Unauthenticated, "No 'token' in secrets received")
+		klog.V(10).Infof("NodePublishVolume: secret misses key '%s' missing so can't authenticate, giving up", tokenKey)
+		return nil, status.Error(codes.Unauthenticated, "Expected key not found in received Secret")
 	}
 
 	vol := &volumeInfo{ID: r.GetVolumeId(), secret: token, path: r.GetTargetPath(), context: r.GetVolumeContext()}
