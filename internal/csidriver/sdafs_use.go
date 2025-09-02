@@ -175,7 +175,6 @@ func unmount(d *Driver, v *volumeInfo) error {
 	if err != nil && d.isMountPoint(d, v) {
 		// Only fail if we have an actual mount point
 
-		// Only fail here if we have an actual mount point
 		klog.V(10).Infof("unmount of %s failed with %v, giving up", v.path, err)
 		return fmt.Errorf("unmount of %s failed: %v giving up", v.path, err)
 	}
