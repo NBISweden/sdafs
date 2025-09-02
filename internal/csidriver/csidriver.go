@@ -113,7 +113,7 @@ type CSIConfig struct {
 }
 
 // NewDriver returns a Driver object. Since the volumes map should be
-// initiaalised NewDriver should be used.
+// initialised NewDriver should be used.
 func NewDriver(config *CSIConfig) (*Driver, error) {
 	for _, path := range []*string{config.Endpoint,
 		config.RegistrationEndpoint} {
