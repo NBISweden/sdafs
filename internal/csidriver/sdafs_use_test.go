@@ -68,7 +68,7 @@ func TestEnsureTargetDir(t *testing.T) {
 	v := volumeInfo{}
 	nowrite := "/cantwrite/here"
 	exists := "/bin"
-	good := "testdir" + uuid.New().String()
+	good := "testdirensuretarget" + uuid.New().String()
 
 	v.path = nowrite
 	err := d.ensureTargetDir(&v)
@@ -103,7 +103,7 @@ func TestUnmount(t *testing.T) {
 	assert.Nil(t, err, "Nonexistant path is okay for unmount")
 
 	// So is unmounted existant
-	v.path = "testdir" + uuid.New().String()
+	v.path = "testdirunmount" + uuid.New().String()
 	err = d.ensureTargetDir(&v)
 	assert.Nil(t, err, "ensureTargetDir failed for testing unmount")
 
@@ -177,7 +177,9 @@ func TestDoMount(t *testing.T) {
 	err = doMount(&d, &v)
 	assert.Nil(t, err, "doMount should work when path is already mounted")
 
-	v.path = "testdir" + uuid.New().String()
+	v.path = "testdirmount" + uuid.New().String()
+	defer os.Remove(v.path) // nolint:errcheck
+
 	err = doMount(&d, &v)
 	assert.NotNil(t, err, "Should fail if sdafs is bad")
 
