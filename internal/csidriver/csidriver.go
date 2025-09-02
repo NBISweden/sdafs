@@ -164,18 +164,13 @@ func NewDriver(config *CSIConfig) (*Driver, error) {
 }
 
 func endpointToNetworkAddress(s string) (string, string) {
-	network := "unix"
-	address := s
 
 	endpointParts := strings.Split(s, ":")
-	if len(endpointParts) > 1 {
-		network = endpointParts[0]
-		address = endpointParts[1]
-	} else {
-		address = endpointParts[0]
+	if len(endpointParts) == 1 {
+		return "unix", s
 	}
 
-	return network, address
+	return endpointParts[0], endpointParts[1]
 }
 
 func makeGrpcServer(serverName string) *grpc.Server {

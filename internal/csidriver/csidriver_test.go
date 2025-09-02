@@ -36,7 +36,7 @@ func TestRegisterKubeletAndPluginRegistration(t *testing.T) {
 	conn, err := grpc.NewClient("unix:"+socket, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	assert.Nil(t, err, "Error while setting up grpc client")
 
-	defer conn.Close()
+	defer conn.Close() // nolint:errcheck
 	regclient := pluginregistration.NewRegistrationClient(conn)
 	assert.NotNil(t, regclient, "Making a grpc client failed")
 
@@ -105,8 +105,8 @@ func TestRun(t *testing.T) {
 	}
 
 	// Cleanup afterwards
-	defer os.Remove(endpoint)
-	defer os.Remove(regEndpoint)
+	defer os.Remove(endpoint)    // nolint:errcheck
+	defer os.Remove(regEndpoint) // nolint:errcheck
 
 	err := d.Run()
 	assert.NotNil(t, err, "Run should fail for bad endpoint")
@@ -128,7 +128,7 @@ func TestRun(t *testing.T) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	assert.Nil(t, err, "Error while setting up grpc client")
 
-	defer conn.Close()
+	defer conn.Close() // nolint:errcheck
 	idClient := csi.NewIdentityClient(conn)
 	assert.NotNil(t, idClient, "Making a grpc id client failed")
 
@@ -145,7 +145,7 @@ func TestRun(t *testing.T) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	assert.Nil(t, err, "Error while setting up grpc client")
 
-	defer conn.Close()
+	defer conn.Close() // nolint:errcheck
 	controllerClient := csi.NewControllerClient(conn)
 	assert.NotNil(t, controllerClient, "Making a grpc controller client failed")
 
@@ -164,7 +164,7 @@ func TestRun(t *testing.T) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	assert.Nil(t, err, "Error while setting up grpc client")
 
-	defer conn.Close()
+	defer conn.Close() // nolint:errcheck
 	nodeClient := csi.NewNodeClient(conn)
 	assert.NotNil(t, nodeClient, "Making a grpc controller client failed")
 
