@@ -235,7 +235,7 @@ func TestCreateVolume(t *testing.T) {
 	_, err := d.CreateVolume(
 		context.TODO(),
 		&csi.CreateVolumeRequest{})
-	assert.NotNil(t, err, "CreateVolum without capabilities should fail")
+	assert.NotNil(t, err, "CreateVolume without capabilities should fail")
 
 	_, err = d.CreateVolume(
 		context.TODO(),
@@ -248,7 +248,7 @@ func TestCreateVolume(t *testing.T) {
 				},
 			},
 		})
-	assert.NotNil(t, err, "CreateVolum with writer capability should fail")
+	assert.NotNil(t, err, "CreateVolume with writer capability should fail")
 
 	_, err = d.CreateVolume(
 		context.TODO(),
