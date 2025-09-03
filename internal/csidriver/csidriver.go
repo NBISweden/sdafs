@@ -198,6 +198,7 @@ func (d *Driver) fixSocketPerms(network, address string) error {
 		return nil
 	}
 
+	// Full world access requested and should be acted on
 	err := os.Chmod(address, 0o0777)
 	if err != nil {
 		return fmt.Errorf("can't make socket accessible: %v", err)

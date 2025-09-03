@@ -23,17 +23,34 @@ func writeToken(d *Driver, v *volumeInfo) error {
 	f, err := os.CreateTemp(*d.tokenDir, "")
 
 	if err != nil {
-		return fmt.Errorf("token writing failed; couldn't create temporary file: %v", err)
+		return fmt.Errorf("token writing failed; couldn't create "+
+			"temporary file: %v", err)
+	}
+
+	// os.CreateTemp now sets 0o600 but let's be explicit about it for clarity
+	// for reviewers and if anyone should try with a really old version.
+	if err := os.Chmod(f.Name(), 0o600); err != nil {
+		f.Close() // nolint:errcheck
+		return fmt.Errorf("token writing failed; couldn't set secure "+
+			"permissions on temporary file: %v", err)
 	}
 
 	_, err = f.WriteString("access_token = " + v.secret + "\n\n")
 	if err != nil {
-		return fmt.Errorf("token writing failed; couldn't write temporary file contents: %v", err)
+		return fmt.Errorf("token writing failed; couldn't write "+
+			"temporary file contents: %v", err)
+	}
+
+	err = f.Close()
+	if err != nil {
+		return fmt.Errorf("token writing failed; error when closing "+
+			"temporary file: %v", err)
 	}
 
 	err = os.Rename(f.Name(), d.getTokenfilePath(v))
 	if err != nil {
-		return fmt.Errorf("token writing failed; couldn't rename temporary file to proper name: %v", err)
+		return fmt.Errorf("token writing failed; couldn't rename "+
+			"temporary file to proper name: %v", err)
 	}
 	return nil
 }
