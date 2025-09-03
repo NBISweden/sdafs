@@ -32,6 +32,14 @@ import (
 
 const connectionCheckDelay = 1 * time.Second
 
+// uid to use for owner if we can't detect it, used for providing inode
+// uid info and access checks
+const fallbackUid = 0
+
+// gid to use as group if we can't detect it, used for providing inode
+// gid info
+const fallbackGid = 0
+
 // SDAfs is the main structure to keep track of our SDA connection
 type SDAfs struct {
 	fuseutil.NotImplementedFileSystem
@@ -672,9 +680,9 @@ func (s *SDAfs) setup() error {
 		s.Owner = currentUserID
 		s.Group = idToNum(currentUser.Gid)
 	} else {
-		s.runAs = 0
-		s.Owner = 0
-		s.Group = 0
+		s.runAs = fallbackUid
+		s.Owner = fallbackUid
+		s.Group = fallbackGid
 	}
 
 	if s.conf.SpecifyUID {
