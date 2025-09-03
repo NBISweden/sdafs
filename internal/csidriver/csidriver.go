@@ -327,7 +327,7 @@ func (d *Driver) Probe(_ context.Context, r *csi.ProbeRequest) (*csi.ProbeRespon
 
 // socketNameCleanup removes any initial unix: and makes the path look nicer
 func socketNameCleanup(s string) string {
-	return path.Clean(strings.TrimPrefix(s, "unix:/"))
+	return path.Clean(strings.TrimPrefix(s, "unix:"))
 }
 
 // GetInfo is the RPC invoked by plugin watcher
