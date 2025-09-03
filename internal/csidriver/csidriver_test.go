@@ -87,11 +87,11 @@ func TestNewDriver(t *testing.T) {
 	assert.Nil(t, err, "Error while calling NewDriver")
 	assert.Equal(t, d.nodeID, c.NodeID, "NodeID mismatch")
 	assert.Equal(t, d.tokenDir, c.TokenDir, "TokenDir mismatch")
-	assert.Equal(t, d.logDir, c.LogDir, err, "LogDir mismatch")
-	assert.Equal(t, d.sdafsPath, c.SdafsPath, err, "SdafsPath mismatch")
-	assert.Equal(t, d.registrationEndpoint, c.RegistrationEndpoint, err,
-		"RegistrationEndpoint mismatch")
-	assert.Equal(t, d.endpoint, c.Endpoint, err, "Endpoint mismatch")
+	assert.Equal(t, d.logDir, c.LogDir, "LogDir mismatch")
+	assert.Equal(t, d.sdafsPath, c.SdafsPath, "SdafsPath mismatch")
+	assert.Equal(t, d.registrationEndpoint, c.RegistrationEndpoint, "RegistrationEndpoint mismatch")
+
+	assert.Equal(t, d.endpoint, c.Endpoint, "Endpoint mismatch")
 	assert.NotNil(t, d.volumes, "Volumes map isn't initialised")
 }
 
