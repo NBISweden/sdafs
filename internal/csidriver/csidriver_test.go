@@ -2,6 +2,7 @@ package csidriver
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"testing"
 
@@ -62,12 +63,14 @@ func TestNewDriver(t *testing.T) {
 	tokendir := uuid.New().String()
 	logdir := uuid.New().String()
 	sdafspath := uuid.New().String()
+	boolVal := true
 
 	c := CSIConfig{
 		NodeID:    &nodeid,
 		TokenDir:  &tokendir,
 		LogDir:    &logdir,
 		SdafsPath: &sdafspath,
+		WorldOpen: &boolVal,
 	}
 	_, err := NewDriver(&c)
 	assert.NotNil(t, err, "NewDriver should fail when no sockets given")
@@ -325,4 +328,37 @@ func TestCreateVolume(t *testing.T) {
 	assert.Contains(t, r.Volume.GetVolumeContext(), "rootURL",
 		"Context should have rootURL")
 
+}
+
+func TestFixSocketPerms(t *testing.T) {
+	d := Driver{}
+	d.worldOpenSocket = false
+	err := d.fixSocketPerms("something", "something")
+	assert.Nil(t, err, "fixSocketPerms should not complain unless unix")
+
+	err = d.fixSocketPerms("unix", "/does/not/exist")
+	assert.Nil(t, err, "fixSocketPerms should not fail when nothing to do")
+
+	d.worldOpenSocket = true
+	err = d.fixSocketPerms("unix", "/does/not/exist")
+	assert.NotNil(t, err, "fixSocketPerms should fail when "+
+		"the address does not exist")
+
+	f, err := os.CreateTemp(".", "")
+	assert.Nil(t, err, "Error while making temporary file for test")
+	name := f.Name()
+	err = f.Close()
+	assert.Nil(t, err, "Error while closing temporary file for test")
+
+	defer os.Remove(name) // nolint:errcheck
+
+	err = d.fixSocketPerms("unix", name)
+	assert.Nil(t, err, "fixSocket should not fail for ordinary files")
+
+	stat, err := os.Stat(name)
+	assert.Nil(t, err, "Error while stating temporary file for test")
+
+	assert.Equal(t, fs.FileMode(0o777),
+		stat.Mode(),
+		"fixSocketPerms should have fixed permissions")
 }

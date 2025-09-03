@@ -58,6 +58,8 @@ func getConfig() *csidriver.CSIConfig {
 
 	m.SdafsPath = flag.String("sdafspath", sdafsPathDefault(), "Path to call sdafs")
 
+	m.WorldOpen = flag.Bool("world-open-socket", false, "Make sockets created world accessible")
+
 	flag.Parse()
 
 	if *help {

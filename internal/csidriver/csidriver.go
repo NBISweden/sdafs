@@ -48,12 +48,9 @@ func (d *Driver) registerKubelet() error {
 		return fmt.Errorf("error while setting up listen for grpc: %v", err)
 	}
 
-	if d.myUid == 0 && network == "unix" {
-		err = os.Chmod(address, 0o0777)
-
-		if err != nil {
-			return fmt.Errorf("can't make socket accessible: %v", err)
-		}
+	err = d.fixSocketPerms(network, address)
+	if err != nil {
+		return fmt.Errorf("error while making socket accessible: %v", err)
 	}
 
 	pluginregistration.RegisterRegistrationServer(csiServer, d)
@@ -93,6 +90,7 @@ type Driver struct {
 	sdafsPath                              *string
 	logDir                                 *string
 	myUid                                  int
+	worldOpenSocket                        bool
 
 	mounter      func(*Driver, *volumeInfo) error
 	unmounter    func(*Driver, *volumeInfo) error
@@ -110,6 +108,7 @@ type CSIConfig struct {
 	TokenDir             *string
 	LogDir               *string
 	SdafsPath            *string
+	WorldOpen            *bool
 }
 
 // NewDriver returns a Driver object. Since the volumes map should be
@@ -155,6 +154,7 @@ func NewDriver(config *CSIConfig) (*Driver, error) {
 		sdafsPath:            config.SdafsPath,
 		logDir:               config.LogDir,
 		myUid:                uid,
+		worldOpenSocket:      *config.WorldOpen,
 		mounter:              doMount,
 		unmounter:            unmount,
 		writeToken:           writeToken,
@@ -193,6 +193,19 @@ func makeGrpcServer(serverName string) *grpc.Server {
 	return grpc.NewServer(opts...)
 }
 
+func (d *Driver) fixSocketPerms(network, address string) error {
+	if !d.worldOpenSocket || network != "unix" {
+		return nil
+	}
+
+	err := os.Chmod(address, 0o0777)
+	if err != nil {
+		return fmt.Errorf("can't make socket accessible: %v", err)
+	}
+
+	return nil
+}
+
 // Run setups and launches the main grpc server
 func (d *Driver) Run() error {
 	klog.V(4).Infof("Starting CSI")
@@ -206,12 +219,9 @@ func (d *Driver) Run() error {
 		return fmt.Errorf("error while setting up listen for grpc: %v", err)
 	}
 
-	if d.myUid == 0 && network == "unix" {
-		err = os.Chmod(address, 0o0777)
-
-		if err != nil {
-			return fmt.Errorf("can't make socket accessible: %v", err)
-		}
+	err = d.fixSocketPerms(network, address)
+	if err != nil {
+		return fmt.Errorf("error while fixing sockets permissions: %v", err)
 	}
 
 	// Close (remove) when we're done

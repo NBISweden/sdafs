@@ -57,6 +57,7 @@ spec:
             - "--tokendir=/tokens"
             - "--sdafslogdir=/log"
             - "--sdafspath=/sdafs"
+            - "--world-open-socket"
           env:
             - name: CSI_ENDPOINT
               value: unix:///var/lib/kubelet/plugins/csi.sda.nbis.se/csi.sock
