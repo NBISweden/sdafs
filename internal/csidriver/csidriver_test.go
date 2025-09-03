@@ -261,7 +261,7 @@ func TestCreateVolume(t *testing.T) {
 				},
 			},
 		})
-	assert.NotNil(t, err, "CreateVolum without name should fail")
+	assert.NotNil(t, err, "CreateVolume without name should fail")
 
 	r, err := d.CreateVolume(
 		context.TODO(),
