@@ -1,0 +1,24 @@
+---
+# StorageClass for SDA
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: sdafs
+provisioner: csi.sda.nbis.se
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: false
+parameters:
+  # PVC should point to a secret where we can get the token
+  csi.storage.k8s.io/secret-namespace: "${pvc.namespace}"
+  csi.storage.k8s.io/secret-name: "${pvc.annotations['sda.nbis.se/token-secret']}"
+  # Some of the options for sdafs are supported here
+  # chunksize: "5120"
+  # cachesize: "128"
+  # maxretries: "20"
+  # rootURL: "..."
+  #
+  # It's also possible to specify the key of the secret designated above
+  # will be used to provide the authentication token.
+  #
+  # tokenkey: "token"

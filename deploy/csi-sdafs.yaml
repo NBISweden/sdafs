@@ -1,0 +1,103 @@
+---
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: csi-sdafs
+  namespace: kube-system
+  annotations:
+    checkov.io/skip1: CKV_K8S_9=No good probes available
+    checkov.io/skip2: CKV_K8S_8=No good probes available
+    checkov.io/skip3: CKV_K8S_38=Is this probe broken?
+    checkov.io/skip4: CKV_K8S_43=Prefer non-digests here
+    checkov.io/skip5: CKV_K8S_40=Need to be able to access new pod directory
+    checkov.io/skip6: CKV_K8S_23=Run as root due to above
+    checkov.io/skip7: >
+      CKV_K8S_16=Bidirectional mount which is needed to actually
+      bring stuff into the pod needs priviliged
+    checkov.io/skip8: CKV_K8S_20=Privilgeded implies privilige escalation
+    checkov.io/skip9: CKV_K8S_15=Not always during development
+spec:
+  selector:
+    matchLabels:
+      app: csi-sdafs
+      role: csi
+  template:
+    metadata:
+      labels:
+        app: csi-sdafs
+        role: csi
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 0
+        runAsGroup: 65535
+      containers:
+        - name: csi-sdafs
+          securityContext:
+            readOnlyRootFilesystem: true
+            privileged: true
+            allowPrivilegeEscalation: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              memory: "100Mi"
+              cpu: "0.5"
+            limits:
+              cpu: "2"
+              memory: "8Gi"
+          image: ghcr.io/nbisweden/sdafs:20250901
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--csi-address=$(CSI_ENDPOINT)"
+            - "--node-id=$(NODE_ID)"
+            - "--v=16"
+            - "--tokendir=/tokens"
+            - "--sdafslogdir=/log"
+            - "--sdafspath=/sdafs"
+            - "--world-open-socket"
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///var/lib/kubelet/plugins/csi.sda.nbis.se/csi.sock
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: USER
+              value: root
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /var/lib/kubelet/plugins/csi.sda.nbis.se
+            - name: registration-dir
+              mountPath: /var/lib/kubelet/plugins_registry
+            - name: pods-mount-dir
+              mountPath: /var/lib/kubelet/pods
+              mountPropagation: "Bidirectional"
+            - name: fuse-device
+              mountPath: /dev/fuse
+            - name: log-dir
+              mountPath: /log
+            - name: token-dir
+              mountPath: /tokens
+      volumes:
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry/
+            type: DirectoryOrCreate
+        - name: plugin-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/csi.sda.nbis.se
+            type: DirectoryOrCreate
+        - name: pods-mount-dir
+          hostPath:
+            path: /var/lib/kubelet/pods
+            type: Directory
+        - name: fuse-device
+          hostPath:
+            path: /dev/fuse
+        - name: token-dir
+          emptyDir: {}
+        - name: log-dir
+          emptyDir: {}
