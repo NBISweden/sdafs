@@ -61,8 +61,8 @@ func doMount(d *Driver, v *volumeInfo) error {
 	}
 
 	for _, k := range []string{"chunksize", "cachesize", "rootURL", "maxretries"} {
-		if v, ok := v.context[k]; ok {
-			args = append(args, "--"+k, v)
+		if val, ok := v.context[k]; ok {
+			args = append(args, "--"+k, val)
 		}
 	}
 
