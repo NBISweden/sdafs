@@ -112,7 +112,7 @@ func doMount(d *Driver, v *volumeInfo) error {
 		return fmt.Errorf("error while running sdafs: %v", err)
 	}
 
-	waited := 0 * d.waitPeriod
+	waited := time.Duration(0)
 
 	for !d.isMountPoint(d, v) && waited < d.maxWaitMount {
 		time.Sleep(d.waitPeriod)
