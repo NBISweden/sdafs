@@ -137,7 +137,7 @@ func doMount(d *Driver, v *volumeInfo) error {
 	}
 
 	if d.isMountPoint(d, v) {
-		klog.V(10).Infof("Filesystem mounted at : %s", v.path)
+		klog.V(10).Infof("Filesystem mounted at: %s", v.path)
 		return nil
 	}
 	klog.V(10).Infof("Filesystem wasn't mounted after %v, giving up", d.maxWaitMount)
