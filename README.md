@@ -163,3 +163,73 @@ will be used to create the file with credentals information passed to `sdafs`.
 Using templates in `StorageClass` allows for very flexible scenarios, e.g.
 having multple `PersistantVolumeClaim`s in a namespace using credentials
 provided by different `Secret`s.
+
+## Using the sdafs CSI driver to access an archive as a user in kubernetes
+
+To consume storage as a user, assuming someone has configured sdafs CSI and
+created the appropriate `StorageClass` (e.g.as `sdafs`), you can create a
+persistent volume claim as per:
+
+```text
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sdafs-test-pvc
+  annotations:
+    sda.nbis.se/token-secret: default-token
+spec:
+  accessModes:
+    - ReadOnlyMany
+  # the resources here are not used but must be there
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: sdafs
+  volumeMode: Filesystem
+```
+
+and then put your token in the secret `default-token` (put your actual token
+to the right of token).
+
+```text
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: default-token
+stringData:
+  token: eyJraW...
+```
+
+After having done so, you should be able to create a pod that gets served
+from the archive:
+
+```text
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sdafs-test-pod
+spec:
+  containers:
+    - image: ubuntu
+      name: atestpod
+      command:
+        - /bin/sleep
+        - "90000"
+      resources: {}
+      volumeMounts:
+        - mountPath: /data
+          name: my-sda
+  volumes:
+    - name: my-sda
+      persistentVolumeClaim:
+        claimName: sdafs-test-pvc
+```
+
+Once you have such a pod, you can see your available datasets under `/data`.
+
+```bash
+$ kubectl exec -it sdafs-test-pod -- ls /data
+dataset1 dataset2
+```
