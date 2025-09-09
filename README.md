@@ -174,7 +174,7 @@ The current examples also doesn't do any healthchecking due to lack of sensible
 probes. If possible, having that would be an
 improvement. We haven't seen or investigated
 [csi-utils#66](https://github.com/kubernetes-csi/csi-lib-utils/issues/66) so
-that could possibly be a reason they'd be *needed* rather than just a very good
+that could possibly be a reason they'd be _needed_ rather than just a very good
 idea.
 
 ## Using the sdafs CSI driver to access an archive as a user in kubernetes
