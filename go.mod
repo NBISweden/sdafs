@@ -6,7 +6,7 @@ toolchain go1.24.2
 
 require (
 	github.com/container-storage-interface/spec v1.11.0
-	github.com/dgraph-io/ristretto/v2 v2.2.0
+	github.com/dgraph-io/ristretto/v2 v2.3.0
 	github.com/google/uuid v1.6.0
 	github.com/jacobsa/fuse v0.0.0-20250702080931-3e9d24d5e3ff
 	github.com/jarcoal/httpmock v1.4.1
@@ -15,7 +15,7 @@ require (
 	github.com/sevlyar/go-daemon v0.1.6
 	github.com/stretchr/testify v1.11.1
 	github.com/tj/assert v0.0.3
-	golang.org/x/sys v0.33.0
+	golang.org/x/sys v0.35.0
 	google.golang.org/grpc v1.75.0
 	google.golang.org/protobuf v1.36.8
 	gopkg.in/ini.v1 v1.67.0
