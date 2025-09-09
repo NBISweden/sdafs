@@ -164,6 +164,19 @@ Using templates in `StorageClass` allows for very flexible scenarios, e.g.
 having multple `PersistantVolumeClaim`s in a namespace using credentials
 provided by different `Secret`s.
 
+### Compatibility and caveats
+
+This setup has been tested in single node scenarios with minikube and multi-node
+with RKE2. There are no known reasons things should suddenly break but
+testing in multi-node scenarios happens only infrequently.
+
+The current examples also doesn't do any healthchecking due to lack of sensible
+probes. If possible, having that would be an
+improvement. We haven't seen or investigated
+[csi-utils#66](https://github.com/kubernetes-csi/csi-lib-utils/issues/66) so
+that could possibly be a reason they'd be *needed* rather than just a very good
+idea.
+
 ## Using the sdafs CSI driver to access an archive as a user in kubernetes
 
 To consume storage as a user, assuming someone has configured sdafs CSI and
