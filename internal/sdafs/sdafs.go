@@ -714,16 +714,11 @@ func (s *SDAfs) setup() error {
 				err)
 		}
 
+		defer caFile.Close() // nolint:errcheck
+
 		pems, err := io.ReadAll(caFile)
 		if err != nil {
 			return fmt.Errorf("error while reading extra CA file %s: %v",
-				s.conf.ExtraCAFile,
-				err)
-		}
-
-		err = caFile.Close()
-		if err != nil {
-			return fmt.Errorf("error while closing extra CA file %s: %v",
 				s.conf.ExtraCAFile,
 				err)
 		}

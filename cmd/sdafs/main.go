@@ -100,12 +100,8 @@ func getConfigs() mainConfig {
 				extraCAFile,
 				err)
 		}
-		err = testOpen.Close()
-		if err != nil {
-			log.Fatalf("Error while closing opened extra CA file %s: %v",
-				extraCAFile,
-				err)
-		}
+
+		defer testOpen.Close() // nolint:errcheck
 	}
 
 	useLogFile := logFile
