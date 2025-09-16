@@ -17,7 +17,7 @@ import (
 	"github.com/sevlyar/go-daemon"
 )
 
-var credentialsFile, rootURL, logFile string
+var credentialsFile, rootURL, logFile, extraCAFile string
 var foreground, open bool
 var maxRetries uint
 var chunkSize uint
@@ -61,6 +61,8 @@ func getConfigs() mainConfig {
 	flag.StringVar(&logFile, "log", "", "File to send logs to instead of stderr,"+
 		" defaults to sdafs.log if detached, empty string means stderr which is default for foreground")
 
+	flag.StringVar(&extraCAFile, "extracafile", "", "File with extra CAs to regard (default no extra)")
+
 	flag.UintVar(&maxRetries, "maxretries", 7, "Max number retries for failed transfers. "+
 		"Retries will be done with some form of backoff. Max 60")
 	flag.BoolVar(&foreground, "foreground", false, "Do not detach, run in foreground and send log output to stdout")
@@ -91,6 +93,21 @@ func getConfigs() mainConfig {
 		usage()
 	}
 
+	if len(extraCAFile) > 0 {
+		testOpen, err := os.Open(extraCAFile)
+		if err != nil {
+			log.Fatalf("Error while opening requested extra CA file %s: %v",
+				extraCAFile,
+				err)
+		}
+		err = testOpen.Close()
+		if err != nil {
+			log.Fatalf("Error while closing opened extra CA file %s: %v",
+				extraCAFile,
+				err)
+		}
+	}
+
 	useLogFile := logFile
 	// Background and logfile not specified
 	if !foreground && logFile == "" {
@@ -104,6 +121,7 @@ func getConfigs() mainConfig {
 		SkipLevels:      0,
 		ChunkSize:       uint64(chunkSize),
 		MaxRetries:      int(maxRetries),
+		ExtraCAFile:     extraCAFile,
 	}
 
 	if open {

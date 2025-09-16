@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -71,6 +73,7 @@ type SDAfs struct {
 type Conf struct {
 	CredentialsFile   string
 	RootURL           string
+	ExtraCAFile       string
 	RemoveSuffix      bool
 	SpecifyUID        bool
 	SpecifyGID        bool
@@ -693,6 +696,38 @@ func (s *SDAfs) setup() error {
 		s.Group = s.conf.GID
 	}
 
+	// Always bring in system CAs
+	certPool, err := x509.SystemCertPool()
+	if err != nil {
+		return fmt.Errorf("error while picking up system CA pool: %v", err)
+	}
+
+	tlsConfig := &tls.Config{RootCAs: certPool}
+
+	// Check if any extra and add if requested
+	if len(s.conf.ExtraCAFile) > 0 {
+		caFile, err := os.Open(s.conf.ExtraCAFile)
+
+		if err != nil {
+			return fmt.Errorf("error while opening extra CA file %s: %v",
+				s.conf.ExtraCAFile,
+				err)
+		}
+
+		pems, err := io.ReadAll(caFile)
+		if err != nil {
+			return fmt.Errorf("error while reading extra CA file %s: %v",
+				s.conf.ExtraCAFile,
+				err)
+		}
+
+		ok := certPool.AppendCertsFromPEM(pems)
+		if !ok {
+			return fmt.Errorf("no certificates acquired from %s, bailing out",
+				s.conf.ExtraCAFile)
+		}
+	}
+
 	//
 	if s.conf.HTTPClient != nil {
 		s.client = s.conf.HTTPClient
@@ -701,6 +736,7 @@ func (s *SDAfs) setup() error {
 			Proxy:                 http.ProxyFromEnvironment,
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          100,
+			TLSClientConfig:       tlsConfig,
 			TLSHandshakeTimeout:   30 * time.Second,
 			ExpectContinueTimeout: 10 * time.Second,
 			IdleConnTimeout:       1800 * time.Second}
