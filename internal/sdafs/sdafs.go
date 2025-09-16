@@ -721,6 +721,13 @@ func (s *SDAfs) setup() error {
 				err)
 		}
 
+		err = caFile.Close()
+		if err != nil {
+			return fmt.Errorf("error while closing extra CA file %s: %v",
+				s.conf.ExtraCAFile,
+				err)
+		}
+
 		ok := certPool.AppendCertsFromPEM(pems)
 		if !ok {
 			return fmt.Errorf("no certificates acquired from %s, bailing out",
