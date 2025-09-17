@@ -114,6 +114,23 @@ func TestNewSDAfs(t *testing.T) {
 
 	assert.NotNil(t, sda.inodes, "inodes in sda is nil")
 	assert.Equal(t, 3, len(sda.inodes), "inodes in sda is unexpected length")
+
+	// Test certificate handling
+
+	c.ExtraCAFile = "/this/name/does/not/exist"
+	sda, err = NewSDAfs(&c)
+	assert.Nil(t, sda, "Got a sda when we should not")
+	assert.NotNil(t, err, "Unexpected lack of error")
+
+	c.ExtraCAFile = "/dev/null"
+	sda, err = NewSDAfs(&c)
+	assert.Nil(t, sda, "Got a sda when we should not")
+	assert.NotNil(t, err, "Unexpected lack of error")
+
+	c.ExtraCAFile = "testchain.pem"
+	sda, err = NewSDAfs(&c)
+	assert.NotNil(t, sda, "Did not get a sda when we should")
+	assert.Nil(t, err, "Unexpected error")
 }
 
 func TestDatasetLoad(t *testing.T) {
