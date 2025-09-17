@@ -11,7 +11,7 @@ import (
 	"github.com/tj/assert"
 )
 
-func TestGetTokenfilePath(t *testing.T) {
+func TestGetCAFilePath(t *testing.T) {
 
 	path := "PATHSTART"
 	d := Driver{
@@ -19,7 +19,55 @@ func TestGetTokenfilePath(t *testing.T) {
 	}
 
 	v := volumeInfo{ID: "IDENTIFIER"}
-	tp := d.getTokenfilePath(&v)
+	tp := d.getCAFilePath(&v)
+
+	assert.Equal(t, "PATHSTART/extraca-IDENTIFIER", tp, "Unexpected path")
+}
+
+func TestWriteExtraCA(t *testing.T) {
+	path := "/this/path/does/not/exist"
+	d := Driver{
+		tokenDir: &path,
+	}
+
+	v := volumeInfo{ID: "IDENTIFIER"}
+	err := d.writeExtraCA(&v)
+	assert.NotNil(t, err, "No extra CA passed, writeExtraCA should fail")
+
+	// Let's try it with data but a bad path
+	v.context = make(map[string]string)
+	v.context["extraca"] = "somedata"
+	err = d.writeExtraCA(&v)
+	assert.NotNil(t, err, "Bad write path, writeExtraCA should fail")
+
+	newpath := "."
+	d.tokenDir = &newpath
+	err = d.writeExtraCA(&v)
+	assert.Nil(t, err, "writeExtraCA should work here")
+	defer os.Remove(d.getCAFilePath(&v)) // nolint:errcheck
+
+	f, err := os.Open(d.getCAFilePath(&v))
+	assert.Nil(t, err, "Unexpected open failure")
+
+	readback, err := io.ReadAll(f)
+	assert.Nil(t, err, "Unexpected read failure")
+
+	assert.Equal(t, []byte(v.context["extraca"]), readback,
+		"Data from extra CA file doesn't match expected contents")
+
+	err = f.Close()
+	assert.Nil(t, err, "Unexpected close failure")
+}
+
+func TestGetTokenFilePath(t *testing.T) {
+
+	path := "PATHSTART"
+	d := Driver{
+		tokenDir: &path,
+	}
+
+	v := volumeInfo{ID: "IDENTIFIER"}
+	tp := d.getTokenFilePath(&v)
 
 	assert.Equal(t, "PATHSTART/token-IDENTIFIER", tp, "Unexpected path")
 }
@@ -40,7 +88,7 @@ func TestWriteToken(t *testing.T) {
 	err := writeToken(&d, &v)
 	assert.Nil(t, err, "writeToken failed")
 
-	filename := d.getTokenfilePath(&v)
+	filename := d.getTokenFilePath(&v)
 	defer os.Remove(filename) // nolint:errcheck
 	// Clean up afterwards
 
