@@ -121,7 +121,7 @@ func doMount(d *Driver, v *volumeInfo) error {
 	if found {
 		err := d.writeExtraCA(v)
 		if err != nil {
-			return fmt.Errorf("error while writing extra CAs to %s for volume %s", d.getCAFilePath(v), v.ID)
+			return fmt.Errorf("error while writing extra CAs to %s for volume %s: %w", d.getCAFilePath(v), v.ID, err)
 		}
 
 		args = append(args, "--extracafile", d.getCAFilePath(v))
