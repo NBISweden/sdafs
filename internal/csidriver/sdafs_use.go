@@ -73,7 +73,7 @@ func writeDataToFile(d *Driver, path string, data []byte) error {
 
 	written := 0
 	for written < len(data) {
-		n, err := f.Write(data)
+		n, err := f.Write(data[written:])
 		if err != nil {
 			return fmt.Errorf("data writing failed; couldn't write "+
 				"temporary file contents: %v", err)
@@ -119,7 +119,11 @@ func doMount(d *Driver, v *volumeInfo) error {
 
 	_, found := v.context["extraca"]
 	if found {
-		d.writeExtraCA(v)
+		err := d.writeExtraCA(v)
+		if err != nil {
+			return fmt.Errorf("error while writing extra CAs to %s for volume %s", d.getCAFilePath(v), v.ID)
+		}
+
 		args = append(args, "--extracafile", d.getCAFilePath(v))
 	}
 
