@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"os/user"
+	"path"
 	"strconv"
 	"testing"
 
@@ -117,7 +118,7 @@ func TestNewSDAfs(t *testing.T) {
 
 	// Test certificate handling
 
-	c.ExtraCAFile = "/this/name/does/not/exist"
+	c.ExtraCAFile = path.Join(t.TempDir(), "does-not-exist")
 	sda, err = NewSDAfs(&c)
 	assert.Nil(t, sda, "Got a sda when we should not")
 	assert.NotNil(t, err, "Unexpected lack of error")

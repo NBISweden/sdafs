@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/fs"
 	"os"
+	"path"
 	"testing"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -336,11 +337,11 @@ func TestFixSocketPerms(t *testing.T) {
 	err := d.fixSocketPerms("something", "something")
 	assert.Nil(t, err, "fixSocketPerms should not complain unless unix")
 
-	err = d.fixSocketPerms("unix", "/does/not/exist")
+	err = d.fixSocketPerms("unix", path.Join(t.TempDir(), "does-not-exist"))
 	assert.Nil(t, err, "fixSocketPerms should not fail when nothing to do")
 
 	d.worldOpenSocket = true
-	err = d.fixSocketPerms("unix", "/does/not/exist")
+	err = d.fixSocketPerms("unix", path.Join(t.TempDir(), "does-not-exist"))
 	assert.NotNil(t, err, "fixSocketPerms should fail when "+
 		"the address does not exist")
 
