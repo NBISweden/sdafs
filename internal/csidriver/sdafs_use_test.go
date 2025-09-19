@@ -12,7 +12,7 @@ import (
 	"github.com/tj/assert"
 )
 
-func nonExistantPath(t *testing.T) string {
+func nonExistentPath(t *testing.T) string {
 	return path.Join(t.TempDir(), "does-not-exist")
 }
 
@@ -30,7 +30,7 @@ func TestGetCAFilePath(t *testing.T) {
 }
 
 func TestWriteExtraCA(t *testing.T) {
-	path := nonExistantPath(t)
+	path := nonExistentPath(t)
 	d := Driver{
 		tokenDir: &path,
 	}
@@ -80,7 +80,7 @@ func TestGetTokenFilePath(t *testing.T) {
 func TestWriteToken(t *testing.T) {
 
 	tokenPath := "."
-	nowrite := path.Join(nonExistantPath(t), "some", "levels", "down")
+	nowrite := path.Join(nonExistentPath(t), "some", "levels", "down")
 	d := Driver{
 		tokenDir: &tokenPath,
 	}
@@ -151,7 +151,7 @@ func TestUnmount(t *testing.T) {
 	}
 
 	// Non-existant is fine
-	v := volumeInfo{path: nonExistantPath(t)}
+	v := volumeInfo{path: nonExistentPath(t)}
 	err := unmount(&d, &v)
 	assert.Nil(t, err, "Nonexistant path is okay for unmount")
 
@@ -185,7 +185,7 @@ func TestUnmount(t *testing.T) {
 func TestIsMountPoint(t *testing.T) {
 
 	d := Driver{}
-	v := volumeInfo{path: nonExistantPath(t)}
+	v := volumeInfo{path: nonExistentPath(t)}
 	ismp := isMountPoint(&d, &v)
 	assert.False(t, ismp, "Nonexistant path is not mount point")
 
@@ -205,7 +205,7 @@ func TestDoMount(t *testing.T) {
 	tokenDir := "/some/dir"
 	truePath := "/bin/true"
 	falsePath := "/bin/false"
-	nonexistant := nonExistantPath(t)
+	nonexistant := nonExistentPath(t)
 
 	d := Driver{
 		tokenDir:     &tokenDir,
@@ -214,7 +214,7 @@ func TestDoMount(t *testing.T) {
 		maxWaitMount: 30 * time.Millisecond,
 	}
 	v := volumeInfo{
-		path:    nonExistantPath(t),
+		path:    nonExistentPath(t),
 		context: make(map[string]string),
 	}
 
