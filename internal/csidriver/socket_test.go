@@ -3,31 +3,32 @@ package csidriver
 import (
 	"net"
 	"os"
+	"path"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/tj/assert"
 )
 
-func makeTempPath() string {
-	return "/tmp/testsocket" + uuid.New().String()
+func makeTempPath(t *testing.T) string {
+	return path.Join(t.TempDir(), "testsocket"+uuid.New().String())
 }
 
 func TestCheckSocket(t *testing.T) {
 
-	s := "else:/doesnotexist"
+	s := "nothing-else:/matters"
 	// Not unix,
 	cont, err := checkSocket(&s)
 	assert.Equal(t, true, cont, "checkSocket shouldn't judge this")
 	assert.Equal(t, nil, err, "Unexpected error from checkSocket")
 
-	s = "unix:/doesnotexist"
+	s = "unix:/" + path.Join(t.TempDir(), "does-not-exist")
 	// Explicit unix, but socket doesn't exist
 	cont, err = checkSocket(&s)
 	assert.Equal(t, true, cont, "checkSocket shouldn't judge this")
 	assert.Equal(t, nil, err, "Unexpected error from checkSocket")
 
-	s = "/doesnotexist"
+	s = path.Join(t.TempDir(), "does-not-exist")
 	// Implicit unix, but socket doesn't exist
 	cont, err = checkSocket(&s)
 	assert.Equal(t, true, cont, "checkSocket shouldn't judge this")
@@ -42,7 +43,7 @@ func TestCheckSocket(t *testing.T) {
 	// Actual abandoned socket path
 	// FIXME: This seems actually broken/doesn't test what it should,
 	// it seems Close will also cause the socket to be deleted somehow
-	socketPath := makeTempPath()
+	socketPath := makeTempPath(t)
 	listener, err := net.Listen("unix", socketPath)
 	assert.Equal(t, nil, err, "Unexpected error from Listen")
 	listener.Close() // nolint:errcheck
@@ -53,7 +54,7 @@ func TestCheckSocket(t *testing.T) {
 	assert.Equal(t, nil, err, "Unexpected error from checkSocket")
 
 	// Again, but keep something listening
-	socketPath = makeTempPath()
+	socketPath = makeTempPath(t)
 	listener, err = net.Listen("unix", socketPath)
 	assert.Equal(t, nil, err, "Unexpected error from net Listen")
 
