@@ -54,7 +54,7 @@ type SDAfs struct {
 	// loading keeps track of datasets *currently* being fetched
 	loading []string
 
-	// publicC4GHkey is the key we to preesent for reencryption
+	// publicC4GHkey is the key we to present for reencryption
 	publicC4GHkey string
 	// privateC4GHkey is our counterpart to publicC4GHkey
 	privateC4GHkey [32]byte
@@ -132,11 +132,11 @@ type Conf struct {
 
 	// UID is the user id to use if SpecifyUID is true
 	UID uint32
-	// GID is the user id to use if SpecifyGID is true
+	// GID is the group id to use if SpecifyGID is true
 	GID uint32
 
 	// SpecifyDirPerms is a flag whatever the DirPerms should be used instead
-	// of default directorry permissions
+	// of default directory permissions
 	SpecifyDirPerms bool
 	// SpecifyFilePerms is a flag whatever the FilePerms should be used instead
 	// of default file permissions
