@@ -14,16 +14,52 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func (d *Driver) getTokenfilePath(v *volumeInfo) string {
+// Return a suitable path for a token
+func (d *Driver) getTokenFilePath(v *volumeInfo) string {
 	return path.Join(*d.tokenDir, "token-"+v.ID)
 }
 
-func writeToken(d *Driver, v *volumeInfo) error {
+// Return a suitable path for a CA
+func (d *Driver) getCAFilePath(v *volumeInfo) string {
+	return path.Join(*d.tokenDir, "extraca-"+v.ID)
+}
 
+// writeToken is managed as a field to enable easier
+// testing
+func writeToken(d *Driver, v *volumeInfo) error {
+	err := writeDataToFile(d,
+		d.getTokenFilePath(v),
+		[]byte("access_token = "+v.secret+"\n\n"))
+
+	if err == nil {
+		return nil
+	}
+
+	return fmt.Errorf("token writing failed: %v", err)
+}
+
+func (d *Driver) writeExtraCA(v *volumeInfo) error {
+	data, found := v.context["extraca"]
+	if !found {
+		return fmt.Errorf("writeExtraCA called without any passed")
+	}
+
+	err := writeDataToFile(d,
+		d.getCAFilePath(v),
+		[]byte(data))
+
+	if err == nil {
+		return nil
+	}
+
+	return fmt.Errorf("extra CA writing failed: %v", err)
+}
+
+func writeDataToFile(d *Driver, path string, data []byte) error {
 	f, err := os.CreateTemp(*d.tokenDir, "")
 
 	if err != nil {
-		return fmt.Errorf("token writing failed; couldn't create "+
+		return fmt.Errorf("data writing failed; couldn't create "+
 			"temporary file: %v", err)
 	}
 
@@ -31,25 +67,29 @@ func writeToken(d *Driver, v *volumeInfo) error {
 	// for reviewers and if anyone should try with a really old version.
 	if err := os.Chmod(f.Name(), 0o600); err != nil {
 		f.Close() // nolint:errcheck
-		return fmt.Errorf("token writing failed; couldn't set secure "+
+		return fmt.Errorf("data writing failed; couldn't set secure "+
 			"permissions on temporary file: %v", err)
 	}
 
-	_, err = f.WriteString("access_token = " + v.secret + "\n\n")
-	if err != nil {
-		return fmt.Errorf("token writing failed; couldn't write "+
-			"temporary file contents: %v", err)
+	written := 0
+	for written < len(data) {
+		n, err := f.Write(data[written:])
+		if err != nil {
+			return fmt.Errorf("data writing failed; couldn't write "+
+				"temporary file contents: %v", err)
+		}
+		written += n
 	}
 
 	err = f.Close()
 	if err != nil {
-		return fmt.Errorf("token writing failed; error when closing "+
+		return fmt.Errorf("data writing failed; error when closing "+
 			"temporary file: %v", err)
 	}
 
-	err = os.Rename(f.Name(), d.getTokenfilePath(v))
+	err = os.Rename(f.Name(), path)
 	if err != nil {
-		return fmt.Errorf("token writing failed; couldn't rename "+
+		return fmt.Errorf("data writing failed; couldn't rename "+
 			"temporary file to proper name: %v", err)
 	}
 	return nil
@@ -71,10 +111,20 @@ func doMount(d *Driver, v *volumeInfo) error {
 	}
 
 	args := []string{"--open", "--loglevel", "-16",
-		"--credentialsfile", d.getTokenfilePath(v)}
+		"--credentialsfile", d.getTokenFilePath(v)}
 	if d.logDir != nil && len(*d.logDir) > 0 {
 		logName := path.Join(*d.logDir, v.ID+".log")
 		args = append(args, "--log="+logName)
+	}
+
+	_, found := v.context["extraca"]
+	if found {
+		err := d.writeExtraCA(v)
+		if err != nil {
+			return fmt.Errorf("error while writing extra CAs to %s for volume %s: %w", d.getCAFilePath(v), v.ID, err)
+		}
+
+		args = append(args, "--extracafile", d.getCAFilePath(v))
 	}
 
 	for _, k := range []string{"chunksize", "cachesize", "rootURL", "maxretries"} {
