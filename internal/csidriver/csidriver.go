@@ -29,6 +29,96 @@ const DRIVERNAME = "csi.sda.nbis.se"
 // VERSIONS are the supported CSI versions
 var VERSIONS = []string{"1.11.0", "1.0.0"}
 
+// volumeInfo keeps information about a volume
+type volumeInfo struct {
+	attached bool
+	secret   string
+	ID       string
+	path     string
+	context  map[string]string
+}
+
+// Driver is the main information bearer internally. We use a single struct for
+// different "roles" of servers we offer
+type Driver struct {
+	csi.UnimplementedIdentityServer
+	csi.UnimplementedControllerServer
+	csi.UnimplementedNodeServer
+	pluginregistration.UnimplementedRegistrationServer
+	endpoint, nodeID, registrationEndpoint *string
+
+	// server is used to keep track of the grpc Server if we should ever need
+	// it
+	server *grpc.Server
+
+	// volumes is used to keep track of the volumes. Beause of pod restarts
+	// et.c. it's not authorative and other volumes can show up and should
+	// be managed properly
+	volumes map[string]*volumeInfo
+
+	// TODO: Should we just keep a reference to copy of the config here instead?
+
+	// tokenDir determines where we should create files with the tokens
+	// that are then passed to sdafs with -credentialsfile
+	tokenDir *string
+
+	// sdafsPath can specify to use a specific path to execute sdafs
+	sdafsPath *string
+
+	// logDir if set points to where we want to store logs
+	logDir *string
+
+	// myUid keeps track of the user id we're running as
+	myUid int
+
+	// worldOpenSocket signals whatever the sockets we create should have
+	// permissions allowing it to be used by only our user (myUid) if false
+	// or everybody if true
+	worldOpenSocket bool
+
+	// these functions are managed as struct fields to simplify testing
+
+	// mounter is the function to be used to mount a volume (doMount)
+	mounter func(*Driver, *volumeInfo) error
+
+	// unmounter is the function to be used to unmount a volume (unmount)
+	unmounter func(*Driver, *volumeInfo) error
+
+	// writeToken is used to write out the token to use for a volume
+	writeToken func(*Driver, *volumeInfo) error
+
+	// isMountPoint reports the requested mounting point of the volume is a
+	// mount point
+	isMountPoint func(*Driver, *volumeInfo) bool
+
+	// maxWaitMount determines how long we wait for a mount to show up
+	// before reporting a failure
+	maxWaitMount time.Duration
+	// waitPeriod determines how long we wait between each check for whatever
+	// a mount has shown up
+	waitPeriod time.Duration
+}
+
+// CSIConfig is the incomning configuration for the driver
+type CSIConfig struct {
+	Endpoint             *string
+	NodeID               *string
+	RegistrationEndpoint *string
+
+	// TokenDir corresponds to tokenDir in Driver
+	TokenDir *string
+
+	// LogDir corresponds to logDir in Driver
+	LogDir *string
+
+	// SdafsPath corresponds to sdafsPath in Driver
+	SdafsPath *string
+
+	// WorldOpen signals whatever we should make the socket we create world
+	// accessible or not
+	WorldOpen *bool
+}
+
 // registerKubelet registers the driver within kubelet
 func (d *Driver) registerKubelet() error {
 
@@ -65,50 +155,6 @@ func (d *Driver) registerKubelet() error {
 	}()
 
 	return nil
-}
-
-// volumeInfo keeps information about a volume
-type volumeInfo struct {
-	attached bool
-	secret   string
-	ID       string
-	path     string
-	context  map[string]string
-}
-
-// Driver is the main information bearer internally. We use a single struct for
-// different "roles" of servers we offer
-type Driver struct {
-	csi.UnimplementedIdentityServer
-	csi.UnimplementedControllerServer
-	csi.UnimplementedNodeServer
-	pluginregistration.UnimplementedRegistrationServer
-	endpoint, nodeID, registrationEndpoint *string
-	server                                 *grpc.Server
-	volumes                                map[string]*volumeInfo
-	tokenDir                               *string
-	sdafsPath                              *string
-	logDir                                 *string
-	myUid                                  int
-	worldOpenSocket                        bool
-
-	mounter      func(*Driver, *volumeInfo) error
-	unmounter    func(*Driver, *volumeInfo) error
-	writeToken   func(*Driver, *volumeInfo) error
-	isMountPoint func(*Driver, *volumeInfo) bool
-	maxWaitMount time.Duration
-	waitPeriod   time.Duration
-}
-
-// CSIConfig is the incomning configuration for the driver
-type CSIConfig struct {
-	Endpoint             *string
-	NodeID               *string
-	RegistrationEndpoint *string
-	TokenDir             *string
-	LogDir               *string
-	SdafsPath            *string
-	WorldOpen            *bool
 }
 
 // NewDriver returns a Driver object. Since the volumes map should be
@@ -164,6 +210,8 @@ func NewDriver(config *CSIConfig) (*Driver, error) {
 	}, nil
 }
 
+// endpointToNetworkAddress converts a string, possibly with a protocol
+// qualifier to a string tuple (protocol, address)
 func endpointToNetworkAddress(s string) (string, string) {
 
 	endpointParts := strings.Split(s, ":")
@@ -174,6 +222,7 @@ func endpointToNetworkAddress(s string) (string, string) {
 	return endpointParts[0], endpointParts[1]
 }
 
+// makeGrpcServer creates a grpc server that does call logging
 func makeGrpcServer(serverName string) *grpc.Server {
 	opts := []grpc.ServerOption{grpc.UnaryInterceptor(
 		func(ctx context.Context, req interface{},
@@ -193,6 +242,7 @@ func makeGrpcServer(serverName string) *grpc.Server {
 	return grpc.NewServer(opts...)
 }
 
+// fixSocketPerms ensures the given socket has the desired permissions
 func (d *Driver) fixSocketPerms(network, address string) error {
 	if !d.worldOpenSocket || network != "unix" {
 		return nil

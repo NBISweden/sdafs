@@ -10,8 +10,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// maxVolumesPerNodeDefault is what we report as MaxVolumesPerNode in
+// NodeGetInfo
 const maxVolumesPerNodeDefault = 100000
 
+// NodeGetInfo reports node information
 func (d *Driver) NodeGetInfo(_ context.Context, r *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
 	return &csi.NodeGetInfoResponse{
 		NodeId:            *d.nodeID,
@@ -19,6 +22,7 @@ func (d *Driver) NodeGetInfo(_ context.Context, r *csi.NodeGetInfoRequest) (*csi
 	}, nil
 }
 
+// NodeGetCapabilities reports node capabilities
 func (d *Driver) NodeGetCapabilities(_ context.Context, r *csi.NodeGetCapabilitiesRequest) (*csi.NodeGetCapabilitiesResponse, error) {
 
 	return &csi.NodeGetCapabilitiesResponse{
@@ -26,6 +30,7 @@ func (d *Driver) NodeGetCapabilities(_ context.Context, r *csi.NodeGetCapabiliti
 	}, nil
 }
 
+// NodePublishVolume publishes (mounts) the given volume for use by a pod
 func (d *Driver) NodePublishVolume(_ context.Context, r *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
 	secrets := r.GetSecrets()
 
@@ -62,11 +67,14 @@ func (d *Driver) NodePublishVolume(_ context.Context, r *csi.NodePublishVolumeRe
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
+// NodeUnublishVolume unpublishes (unmounts) the given volume
 func (d *Driver) NodeUnpublishVolume(_ context.Context, r *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
 
 	vol, found := d.volumes[r.GetVolumeId()]
 	if !found {
 		// If we haven't seen this before, make one up
+		// we can't fall out since we might not know about everything due
+		// to restart and us not trying to keep any persistent state
 		vol = &volumeInfo{path: r.GetTargetPath()}
 		d.volumes[r.GetVolumeId()] = vol
 	}

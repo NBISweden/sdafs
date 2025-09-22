@@ -149,8 +149,14 @@ type Conf struct {
 	// permissions by setting SpecifyFilePerms
 	FilePerms os.FileMode
 
+	// SkipLevels gives the number of levels in the directory structure
+	// to skip
 	SkipLevels int
+
+	// MaxRetries is used to configure the maximum number of retries of
+	// failed transfers with backoff
 	MaxRetries int
+
 	// HTTPClient allows for passing a preconfigured http.Client
 	// DOING SO DISABLES DEFAULTS, INCLUDING HANDLING OF ExtraCAFile
 	HTTPClient *http.Client
@@ -168,17 +174,38 @@ type Conf struct {
 type inode struct {
 	attr fuseops.InodeAttributes
 
-	dir     bool
-	loaded  bool
-	key     string
-	dataset string
-	// For directories, children.
-	entries []fuseutil.Dirent
-	id      fuseops.InodeID
+	// dir determines whatever the inode represents a "directory" (which does
+	// not correspond to anything in the sensitive data archive)
+	dir bool
 
-	fileSize    uint64
+	// loaded is used to represent whatever the corresponding dataset has
+	// been loaded for an inode representing a dataset
+	loaded bool
+
+	// key is the key in the archive for the object represented by the inode
+	key string
+
+	// dataset is
+	// * the dataset the inode represent for inodes representing inodes
+	// * the dataset the key is valid within for inodes represeting objects
+	dataset string
+
+	// entries contains the children for an inode representing a directory
+	entries []fuseutil.Dirent
+
+	// id is the id of this inode
+	id fuseops.InodeID
+
+	// fileSize is the decrypted file size of the object for inodes representing
+	// objects
+	fileSize uint64
+
+	// rawFileSize is the file size as reported by the archive, quality of this
+	// has varied
 	rawFileSize uint64
-	totalSize   uint64
+
+	// totalSize (if set) is the total size as delivered for the object
+	totalSize uint64
 }
 
 // traceLevel is an extra level for more information than debug should give
@@ -197,7 +224,7 @@ func (s *SDAfs) addInode(n *inode) fuseops.InodeID {
 	return i
 }
 
-// getInode fetches an inode
+// getInode fetches a specific inode
 func (s *SDAfs) getInode(n fuseops.InodeID) *inode {
 	s.maplock.RLock()
 	defer s.maplock.RUnlock()
