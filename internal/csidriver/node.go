@@ -67,7 +67,7 @@ func (d *Driver) NodePublishVolume(_ context.Context, r *csi.NodePublishVolumeRe
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
-// NodeUnublishVolume unpublishes (unmounts) the given volume
+// NodeUnpublishVolume unpublishes (unmounts) the given volume
 func (d *Driver) NodeUnpublishVolume(_ context.Context, r *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
 
 	vol, found := d.volumes[r.GetVolumeId()]

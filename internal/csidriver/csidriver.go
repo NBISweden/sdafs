@@ -51,8 +51,8 @@ type Driver struct {
 	// it
 	server *grpc.Server
 
-	// volumes is used to keep track of the volumes. Beause of pod restarts
-	// et.c. it's not authorative and other volumes can show up and should
+	// volumes is used to keep track of the volumes. Because of pod restarts
+	// et.c. it's not authoritative and other volumes can show up and should
 	// be managed properly
 	volumes map[string]*volumeInfo
 

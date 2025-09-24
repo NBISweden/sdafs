@@ -57,7 +57,7 @@ var prefetches map[string][]uint64
 // prefetchLock is used to manage synchronisation of prefetches
 var prefetchLock sync.Mutex
 
-// idLock is used to manage syncronisation of id management
+// idLock is used to manage synchronisation of id management
 var idLock sync.Mutex
 
 // nextID is the id to use next time we create a new HTTPReader

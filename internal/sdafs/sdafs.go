@@ -187,7 +187,7 @@ type inode struct {
 
 	// dataset is
 	// * the dataset the inode represent for inodes representing inodes
-	// * the dataset the key is valid within for inodes represeting objects
+	// * the dataset the key is valid within for inodes representing objects
 	dataset string
 
 	// entries contains the children for an inode representing a directory
