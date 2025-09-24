@@ -16,38 +16,54 @@ import (
 	"github.com/dgraph-io/ristretto/v2"
 )
 
+// cacheLifeTime is the maximum lifetime of an object in the cache
 const cacheLifeTime = 4 * time.Hour
 
+// Conf is the struct passed in to configure the httpreader as such
 type Conf struct {
-	Token      string
-	Client     *http.Client
-	Headers    *http.Header
+	// Token is the token we present for authentication
+	Token string
+	// Client is used to pass in the http.Client to use
+	Client *http.Client
+	// Headers is used to pass in
+	Headers *http.Header
+	// MaxRetries is the number to retries a transfer that doesn't work
 	MaxRetries int
-	ChunkSize  uint64
-	CacheSize  uint64
+
+	// ChunkSize decides how much data (in bytes) sdafs will ask to have read
+	// in a single operation
+	ChunkSize uint64
+
+	// CacheSize decides how much memory (in bytes) may be used for caching
+	CacheSize uint64
 }
 
+// Request carries information about a data request
 type Request struct {
 	FileURL    string
 	ObjectSize uint64
 }
 
+// traceLevel determines the level we log at
+// FIXME: Make configurable
 const traceLevel = -12
 
-// TODO: Make something better that does TTLing
-
-// type cacheKey struct {
-// 	fileURL string
-// 	offset  uint64
-// }
-
+// cache is used to keep a cache of fetch data
 var cache *ristretto.Cache[string, *CacheBlock]
 
+// prefetches is used to keep track of ongoing prefetches
 var prefetches map[string][]uint64
+
+// prefetchLock is used to manage synchronisation of prefetches
 var prefetchLock sync.Mutex
 
+// idLock is used to manage synchronisation of id management
 var idLock sync.Mutex
+
+// nextID is the id to use next time we create a new HTTPReader
 var nextID uint64
+
+// once is used to facilitate one time initialisation
 var once sync.Once
 
 // CacheBlock is used to keep track of cached data
@@ -60,8 +76,10 @@ type CacheBlock struct {
 
 func (r *HTTPReader) init() {
 	once.Do(func() {
+		// First time, setup some globals
+
 		var err error
-		// Make the map if not done yet
+		// Make the cache
 		config := ristretto.Config[string, *CacheBlock]{
 			NumCounters: int64(r.conf.CacheSize / r.prefetchSize() * 10),
 			MaxCost:     int64(r.conf.CacheSize),

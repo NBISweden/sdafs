@@ -45,67 +45,167 @@ const fallbackGid = 0
 // SDAfs is the main structure to keep track of our SDA connection
 type SDAfs struct {
 	fuseutil.NotImplementedFileSystem
-	conf           *Conf
-	datasets       []string
-	loading        []string
-	publicC4GHkey  string
-	privateC4GHkey [32]byte
-	token          string
-	Owner          uint32
-	Group          uint32
-	runAs          uint32
-	DirPerms       os.FileMode
-	FilePerms      os.FileMode
-	inodes         map[fuseops.InodeID]*inode
+	conf *Conf
 
-	startTime   time.Time
-	client      *http.Client
-	maplock     sync.RWMutex
-	nextInode   fuseops.InodeID
-	handles     map[fuseops.HandleID]io.ReadSeekCloser
+	// datasets will be loaded at start to the datasets we have access to
+	// we don't try to pick up on new access grants made available after load
+	datasets []string
+
+	// loading keeps track of datasets *currently* being fetched
+	loading []string
+
+	// publicC4GHkey is the key we to present for reencryption
+	publicC4GHkey string
+	// privateC4GHkey is our counterpart to publicC4GHkey
+	privateC4GHkey [32]byte
+
+	// token is the access token we present for authentication
+	token string
+
+	// Owner is the user id we present as owner
+	Owner uint32
+	// Group is the group id we present as group
+	Group uint32
+
+	runAs uint32
+
+	// DirPerms is the permissions we present on "directories" (which are purely
+	// virtual constructs)
+	DirPerms os.FileMode
+
+	// FilePerms is the permissions we present on files (objects)
+	FilePerms os.FileMode
+
+	// inodes is used to keep track of the filesystem view we offer
+	inodes map[fuseops.InodeID]*inode
+	// nextInode is the next inode number to be used
+	nextInode fuseops.InodeID
+
+	// startTime keeps track of when we started and use that as time stamp when
+	// nothing better is offered
+	startTime time.Time
+
+	// client contains the http.Client pointer that we use
+	client *http.Client
+
+	// maplock is used to achieve synchronized execution, mainly for inodes
+	// map but we also piggyback on it for dealing with datasets loading
+	maplock sync.RWMutex
+
+	// handles is used to keep track of open "files"
+	handles map[fuseops.HandleID]io.ReadSeekCloser
+
+	// extraHeader is an extra header we add on requests, we put cookies
+	// we should use there
 	extraHeader *http.Header
 
+	// httpReaderConf is used to keep track of the configuration to pass to
+	// httpreader
 	httpReaderConf *httpreader.Conf
-	tokenLoadTime  time.Time
+
+	// tokenLoadTime keeps track of when we last fetched the token from the
+	// credentials file, used to decide if we should reread
+	tokenLoadTime time.Time
 }
 
 // Conf holds the configuration
 type Conf struct {
-	CredentialsFile   string
-	RootURL           string
-	ExtraCAFile       string
-	RemoveSuffix      bool
-	SpecifyUID        bool
-	SpecifyGID        bool
-	UID               uint32
-	GID               uint32
-	SpecifyDirPerms   bool
-	SpecifyFilePerms  bool
-	SkipLevels        int
-	MaxRetries        int
-	DirPerms          os.FileMode
-	FilePerms         os.FileMode
-	HTTPClient        *http.Client
-	ChunkSize         uint64
-	CacheSize         uint64
-	SessionCookieName string
+	// CredentialsFile is where we pick up tokens
+	CredentialsFile string
+	// RootURL is the base of the URL where the sensitive data archive is
+	// exposed
+	RootURL string
+	// ExtraCAFile can contain the name of a file read at start that can
+	// contain certificates in PEM format that are then added to the
+	// CA pool
+	ExtraCAFile string
+	// RemoveSuffix manages whatever we expose names with the
+	// .c4gh suffix or not
+	RemoveSuffix bool
+
+	// SpecifyUID is a flag whatever the UID should be used instead of the
+	// current user id
+	SpecifyUID bool
+	// SpecifyGID is a flag whatever the GID should be used instead of the
+	// current primary group id
+	SpecifyGID bool
+
+	// UID is the user id to use if SpecifyUID is true
+	UID uint32
+	// GID is the group id to use if SpecifyGID is true
+	GID uint32
+
+	// SpecifyDirPerms is a flag whatever the DirPerms should be used instead
+	// of default directory permissions
+	SpecifyDirPerms bool
+	// SpecifyFilePerms is a flag whatever the FilePerms should be used instead
+	// of default file permissions
+	SpecifyFilePerms bool
+
+	// DirPerms are the permissions to use when overriding default directory
+	// permissions by setting SpecifyDirPerms
+	DirPerms os.FileMode
+	// FilePerms are the permissions to use when overriding default file
+	// permissions by setting SpecifyFilePerms
+	FilePerms os.FileMode
+
+	// SkipLevels gives the number of levels in the directory structure
+	// to skip
+	SkipLevels int
+
+	// MaxRetries is used to configure the maximum number of retries of
+	// failed transfers with backoff
+	MaxRetries int
+
+	// HTTPClient allows for passing a preconfigured http.Client
+	// DOING SO DISABLES DEFAULTS, INCLUDING HANDLING OF ExtraCAFile
+	HTTPClient *http.Client
+
+	// ChunkSize is carried over to httpreader and decides how much data (in
+	// bytes) sdafs will ask to have read in a single operation
+	ChunkSize uint64
+
+	// CacheSize is carried over to httpreader and decides how much memory (in
+	// bytes) may be used for caching
+	CacheSize uint64
 }
 
 // inode is the struct to manage a directory entry
 type inode struct {
 	attr fuseops.InodeAttributes
 
-	dir     bool
-	loaded  bool
-	key     string
-	dataset string
-	// For directories, children.
-	entries []fuseutil.Dirent
-	id      fuseops.InodeID
+	// dir determines whatever the inode represents a "directory" (which does
+	// not correspond to anything in the sensitive data archive)
+	dir bool
 
-	fileSize    uint64
+	// loaded is used to represent whatever the corresponding dataset has
+	// been loaded for an inode representing a dataset
+	loaded bool
+
+	// key is the key in the archive for the object represented by the inode
+	key string
+
+	// dataset is
+	// * the dataset the inode represent for inodes representing inodes
+	// * the dataset the key is valid within for inodes representing objects
+	dataset string
+
+	// entries contains the children for an inode representing a directory
+	entries []fuseutil.Dirent
+
+	// id is the id of this inode
+	id fuseops.InodeID
+
+	// fileSize is the decrypted file size of the object for inodes representing
+	// objects
+	fileSize uint64
+
+	// rawFileSize is the file size as reported by the archive, quality of this
+	// has varied
 	rawFileSize uint64
-	totalSize   uint64
+
+	// totalSize (if set) is the total size as delivered for the object
+	totalSize uint64
 }
 
 // traceLevel is an extra level for more information than debug should give
@@ -124,7 +224,7 @@ func (s *SDAfs) addInode(n *inode) fuseops.InodeID {
 	return i
 }
 
-// getInode fetches an inode
+// getInode fetches a specific inode
 func (s *SDAfs) getInode(n fuseops.InodeID) *inode {
 	s.maplock.RLock()
 	defer s.maplock.RUnlock()
