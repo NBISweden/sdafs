@@ -32,6 +32,8 @@ import (
 	"gopkg.in/ini.v1"
 )
 
+const s3Prefix = "s3"
+
 const connectionCheckDelay = 1 * time.Second
 
 // uid to use for owner if we can't detect it, used for providing inode
@@ -1142,7 +1144,7 @@ func (s *SDAfs) getNewIDLocked() (fuseops.HandleID, error) {
 // getFileURL returns the path to use when requesting the HTTPReader
 func (s *SDAfs) getFileURL(i *inode) string {
 
-	u, err := url.JoinPath(s.conf.RootURL, "/s3-encrypted/", i.dataset, i.key)
+	u, err := url.JoinPath(s.conf.RootURL, s3Prefix, i.dataset, i.key)
 
 	if err != nil {
 		slog.Debug("Failed to create access URL",
@@ -1161,7 +1163,7 @@ func (s *SDAfs) getTotalSize(i *inode) uint64 {
 		return i.totalSize
 	}
 
-	url, err := url.JoinPath("s3-encrypted", i.dataset, i.key)
+	url, err := url.JoinPath(s3Prefix, i.dataset, i.key)
 	if err != nil {
 		slog.Debug("Error while making URL for size check",
 			"key", i.key,
