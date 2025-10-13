@@ -15,7 +15,7 @@ require (
 	github.com/sevlyar/go-daemon v0.1.6
 	github.com/stretchr/testify v1.11.1
 	github.com/tj/assert v0.0.3
-	golang.org/x/sys v0.36.0
+	golang.org/x/sys v0.37.0
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10
 	gopkg.in/ini.v1 v1.67.0
