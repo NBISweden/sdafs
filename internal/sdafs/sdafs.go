@@ -1163,7 +1163,7 @@ func (s *SDAfs) getTotalSize(i *inode) uint64 {
 		return i.totalSize
 	}
 
-	url, err := url.JoinPath(s3Prefix, i.dataset, i.key)
+	objectUrl, err := url.JoinPath(s3Prefix, i.dataset, i.key)
 	if err != nil {
 		slog.Debug("Error while making URL for size check",
 			"key", i.key,
@@ -1171,11 +1171,11 @@ func (s *SDAfs) getTotalSize(i *inode) uint64 {
 		return 0
 	}
 
-	r, err := s.doRequest(url, "HEAD")
+	r, err := s.doRequest(objectUrl, "HEAD")
 	if err != nil {
 		slog.Debug("Error while making request to URL for size check",
 			"key", i.key,
-			"url", url,
+			"url", objectUrl,
 			"error", err)
 		return 0
 	}
@@ -1207,7 +1207,7 @@ func (s *SDAfs) getTotalSize(i *inode) uint64 {
 	// No header helps, use a reasonable default
 
 	slog.Debug("HEAD didn't help for total size, using default 124",
-		"url", url,
+		"url", objectUrl,
 		"key", i.key)
 	i.totalSize = 124 + i.rawFileSize
 
