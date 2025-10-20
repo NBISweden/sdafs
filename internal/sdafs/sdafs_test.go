@@ -1,6 +1,8 @@
 package sdafs
 
 import (
+	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/user"
@@ -8,6 +10,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jarcoal/httpmock"
 	"github.com/tj/assert"
 )
@@ -193,5 +196,68 @@ func TestDatasetLoad(t *testing.T) {
 	err = sda.checkLoaded(sda.inodes[4])
 	assert.Nil(t, err, "Unexpected error")
 	assert.Equal(t, 8, len(sda.inodes), "inodes in sda is unexpected length")
+
+}
+
+func TestSessionHandling(t *testing.T) {
+
+	// We can't (sadly) use httpmock since we want to test the client as done
+	// Instead we run a http server on a dynamic port (inspired by
+	// https://www.yellowduck.be/posts/dynamically-allocating-ports-in-a-webserver-using-go)
+
+	count := 0
+	cookieval := uuid.New().String()
+
+	listener, err := net.Listen("tcp", "[::1]:0")
+	assert.Nil(t, err, "Unexpected error")
+	assert.NotNil(t, listener, "Unexpected error")
+	defer listener.Close() // nolint:errcheck
+
+	http.HandleFunc("/",
+		func(w http.ResponseWriter, r *http.Request) {
+
+			count++
+			t.Logf("http helper call %d", count)
+
+			if count == 1 {
+				http.SetCookie(w, &http.Cookie{
+					Name:  "somecookie",
+					Value: cookieval,
+				})
+				w.WriteHeader(200)
+				w.Write([]byte("[]\n")) // nolint:errcheck
+				return
+			}
+
+			c, err := r.Cookie("somecookie")
+			if c == nil || err != nil {
+				t.Logf("No somecookie? err: %v", err)
+				w.WriteHeader(500)
+				return
+			}
+
+			if c.Value != cookieval {
+				t.Logf("Bad cookie value for somecookie")
+				w.WriteHeader(500)
+				return
+			}
+
+			w.WriteHeader(200)
+			w.Write([]byte("[]\n")) // nolint:errcheck
+		})
+
+	go http.Serve(listener, nil) // nolint:errcheck
+
+	c := Conf{}
+	c.CredentialsFile = "test.ini"
+	c.RootURL = fmt.Sprintf("http://[::1]:%d",
+		listener.Addr().(*net.TCPAddr).Port)
+
+	sda, err := NewSDAfs(&c)
+	assert.Nil(t, err, "Unexpected error")
+	assert.NotNil(t, sda, "Unexpected error")
+
+	err = sda.getDatasets()
+	assert.Nil(t, err, "Unexpected error")
 
 }

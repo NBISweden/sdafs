@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"os/user"
@@ -21,6 +22,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/net/publicsuffix"
 
 	"github.com/NBISweden/sdafs/internal/httpreader"
 
@@ -844,7 +847,21 @@ func (s *SDAfs) setup() error {
 			TLSHandshakeTimeout:   30 * time.Second,
 			ExpectContinueTimeout: 10 * time.Second,
 			IdleConnTimeout:       1800 * time.Second}
-		s.client = &http.Client{Transport: &transport}
+
+		jar, err := cookiejar.New(
+			&cookiejar.Options{
+				PublicSuffixList: publicsuffix.List,
+			})
+
+		if err != nil {
+			return fmt.Errorf("unexpected error setting up cookiejar: %v",
+				err)
+		}
+
+		s.client = &http.Client{
+			Transport: &transport,
+			Jar:       jar,
+		}
 	}
 
 	s.DirPerms = 0500
