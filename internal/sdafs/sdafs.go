@@ -37,6 +37,9 @@ import (
 
 const s3Prefix = "s3"
 
+// sda-cli version we pretend to be
+var sdaCliVersion = "0.3.0"
+
 const connectionCheckDelay = 1 * time.Second
 
 // uid to use for owner if we can't detect it, used for providing inode
@@ -900,6 +903,7 @@ func (s *SDAfs) setup() error {
 	header := make(http.Header)
 	s.extraHeader = &header
 	s.extraHeader.Add("Client-Public-Key", publicKeyEncoded)
+	s.extraHeader.Add("SDA-Client-Version", sdaCliVersion)
 
 	s.httpReaderConf = &httpreader.Conf{
 		Token:      s.token,
