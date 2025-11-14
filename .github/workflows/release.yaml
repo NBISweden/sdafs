@@ -91,6 +91,8 @@ jobs:
         run: |
           branch=image_bump_${GITHUB_REF_NAME}
           git checkout -b "$branch"
+          git config user.email "sdafs_contact@soua.net"
+          git config user.name "Automatic update"
           git add deploy/csi-sdafs.yaml
           git commit -m "Bump image reference for release ${GITHUB_REF_NAME}"
           git push origin "$branch"
