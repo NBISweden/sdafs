@@ -88,6 +88,8 @@ jobs:
           deploy/csi-sdafs.yaml
 
       - name: Create pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           branch=image_bump_${GITHUB_REF_NAME}
           git checkout -b "$branch"
