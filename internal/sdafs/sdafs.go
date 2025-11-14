@@ -38,7 +38,7 @@ import (
 const s3Prefix = "s3"
 
 // sda-cli version we pretend to be
-var sdaCliVersion = "0.3.0"
+const sdaCliVersion = "0.3.0"
 
 const connectionCheckDelay = 1 * time.Second
 
