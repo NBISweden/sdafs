@@ -68,3 +68,24 @@ jobs:
             org.opencontainers.image.source=${{ github.event.repository.clone_url }}
             org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
             org.opencontainers.image.revision=${{ github.sha }}
+
+  bump_image_reference:
+    name: Update deploy contents to reference the image for the latest release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+
+      - name: Fix image reference
+        run: >
+          sed -i -e
+          "s,image: ghcr.io/nbisweden/sdafs:.*,image: ghcr.io/nbisweden/sdafs:${GITHUB_REF_NAME},"
+          deploy/csi-sdafs.yaml
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e
