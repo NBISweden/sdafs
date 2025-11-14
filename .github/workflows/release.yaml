@@ -88,4 +88,11 @@ jobs:
           deploy/csi-sdafs.yaml
 
       - name: Create pull request
-        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e
+        run: |
+          branch=image_bump_${GITHUB_REF_NAME}
+          git checkout -b "$branch"
+          git add deploy/csi-sdafs.yaml
+          git commit -m "Bump image reference for release ${GITHUB_REF_NAME}"
+          git push origin "$branch"
+          gh pr create --title "Bump image for release ${GITHUB_REF_NAME}" \
+            --body "Use latest release in deployment files"
