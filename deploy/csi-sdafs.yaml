@@ -48,7 +48,7 @@ spec:
             limits:
               cpu: "2"
               memory: "8Gi"
-          image: ghcr.io/nbisweden/sdafs:v0.0.18
+          image: ghcr.io/nbisweden/sdafs:v0.0.22
           imagePullPolicy: IfNotPresent
           args:
             - "--csi-address=$(CSI_ENDPOINT)"
