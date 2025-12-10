@@ -3,6 +3,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: csi-sdafs-np
+  namespace: kube-system
 spec:
   podSelector:
     matchLabels:
@@ -25,6 +26,12 @@ spec:
           podSelector:
             matchLabels:
               k8s-app: kube-dns
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
       ports:
         - protocol: UDP
           port: 53
@@ -36,16 +43,23 @@ spec:
           podSelector:
             matchLabels:
               k8s-app: kube-dns
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
       ports:
         - protocol: UDP
           port: 53
 
 ---
-# Attacher and provisioner should not talk to any network services
+# Attacher and provisioner should only talk to kubeapi
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: csi-sdafs-systemservices-np
+  namespace: kube-system
 spec:
   podSelector:
     matchLabels:
@@ -54,5 +68,17 @@ spec:
   policyTypes:
     - Ingress
     - Egress
-  egress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+          podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
   ingress: []
