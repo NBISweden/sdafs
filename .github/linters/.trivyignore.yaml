@@ -26,6 +26,7 @@ misconfigurations:
     paths:
       - deploy/attacher.yaml
       - deploy/csi-sdafs.yaml
+      - deploy/networkpolicy.yaml
   # Running as root required to access/create pod directories
   - id: AVD-KSV-0012
     paths:
