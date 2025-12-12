@@ -123,7 +123,6 @@ spec:
             - "--leader-election"
             - "--http-endpoint=:4001"
             - "--controller-publish-readonly=true"
-            - "--node-deployment=true"
           env:
             - name: ADDRESS
               value: /var/lib/kubelet/plugins/csi.sda.nbis.se/csi.sock
