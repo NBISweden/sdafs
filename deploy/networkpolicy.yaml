@@ -67,21 +67,8 @@ spec:
       role: systemservices
   policyTypes:
     - Ingress
-    - Egress
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              name: kube-system
-          podSelector: {}
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-          podSelector: {}
-      ports:
-        - protocol: TCP
-          port: 443
-    - to:
+  ingress:
+    - from:
         - namespaceSelector:
             matchLabels:
               name: kube-system
@@ -97,7 +84,6 @@ spec:
       ports:
         - protocol: UDP
           port: 53
-  ingress:
     - from:
         - namespaceSelector:
             matchLabels:
