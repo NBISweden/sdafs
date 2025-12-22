@@ -18,10 +18,10 @@ require (
 	golang.org/x/net v0.48.0
 	golang.org/x/sys v0.39.0
 	google.golang.org/grpc v1.77.0
-	google.golang.org/protobuf v1.36.10
+	google.golang.org/protobuf v1.36.11
 	gopkg.in/ini.v1 v1.67.0
 	k8s.io/klog/v2 v2.130.1
-	k8s.io/kubelet v0.34.2
+	k8s.io/kubelet v0.34.3
 )
 
 require (
