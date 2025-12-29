@@ -1,8 +1,6 @@
 module github.com/NBISweden/sdafs
 
-go 1.24.0
-
-toolchain go1.24.2
+go 1.25.0
 
 require (
 	github.com/container-storage-interface/spec v1.12.0
@@ -21,7 +19,7 @@ require (
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/ini.v1 v1.67.0
 	k8s.io/klog/v2 v2.130.1
-	k8s.io/kubelet v0.34.3
+	k8s.io/kubelet v0.35.0
 )
 
 require (
