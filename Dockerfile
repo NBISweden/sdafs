@@ -1,4 +1,4 @@
-FROM "golang:1.24-bullseye" AS build
+FROM "golang:1.25-bookworm" AS build
 ENV GO111MODULE=on
 ENV CGO_ENABLED=0
 ENV GOOS=linux
