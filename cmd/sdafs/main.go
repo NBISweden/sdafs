@@ -17,14 +17,6 @@ import (
 	"github.com/sevlyar/go-daemon"
 )
 
-var credentialsFile, rootURL, logFile, extraCAFile string
-var foreground, open bool
-var maxRetries uint
-var chunkSize uint
-var cacheSize uint
-var cacheMemPerCent uint
-var logLevel int
-
 var Version string = "development"
 
 // usage prints usage and version for the benefit of the user
@@ -53,6 +45,16 @@ type mainConfig struct {
 // mainConfig makes the configuration structure from whatever sources applies
 // (currently command line flags only)
 func getConfigs() mainConfig {
+	var credentialsFile, rootURL, logFile, extraCAFile string
+	var foreground, open bool
+	var maxRetries uint
+	var chunkSize uint
+	var cacheSize uint
+	var cacheMemPerCent uint
+	var logLevel int
+	var owner uint
+	var group uint
+
 	home := os.Getenv("HOME")
 
 	credentialsDefault := fmt.Sprintf("%s/.s3cmd", home)
