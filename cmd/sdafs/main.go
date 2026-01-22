@@ -133,11 +133,21 @@ func getConfigs() mainConfig {
 	}
 
 	if slices.Contains(passed, "owner") {
+
+		if owner > uint(^uint32(0)) {
+			log.Fatalf("uid requested larger than allowed %d", ^uint32(0))
+		}
+
 		conf.SpecifyUID = true
 		conf.UID = uint32(owner)
 	}
 
 	if slices.Contains(passed, "group") {
+
+		if group > uint(^uint32(0)) {
+			log.Fatalf("gid requested larger than allowed %d", ^uint32(0))
+		}
+
 		conf.SpecifyGID = true
 		conf.GID = uint32(group)
 	}

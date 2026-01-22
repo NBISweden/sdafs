@@ -47,6 +47,30 @@ func TestBadMaxRetries(t *testing.T) {
 	runExiting(t, "TestBadMaxRetries")
 }
 
+func TestBadUID(t *testing.T) {
+	if os.Getenv("BE_CRASHER") == "1" {
+		os.Args = []string{"binary", "-owner", "9000000000", "mountpoint"}
+		flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+		flag.Parse()
+		getConfigs()
+		return
+	}
+
+	runExiting(t, "TestBadUID")
+}
+
+func TestBadGID(t *testing.T) {
+	if os.Getenv("BE_CRASHER") == "1" {
+		os.Args = []string{"binary", "-group", "80000000000", "mountpoint"}
+		flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+		flag.Parse()
+		getConfigs()
+		return
+	}
+
+	runExiting(t, "TestBadGID")
+}
+
 func TestConfOptions(t *testing.T) {
 	safeArgs := os.Args
 
