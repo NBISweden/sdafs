@@ -937,7 +937,7 @@ func (s *SDAfs) VerifyCredentials() error {
 
 // checkPerms verifies that the operation
 func (s *SDAfs) checkPerms(o *fuseops.OpContext) error {
-	if s.runAs == o.Uid {
+	if s.Owner == o.Uid {
 		return nil
 	}
 
