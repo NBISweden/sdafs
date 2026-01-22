@@ -76,8 +76,8 @@ func getConfigs() mainConfig {
 	flag.UintVar(&cacheSize, "cachesize", 0, "Cache size (in mb), overrides percent if set")
 	flag.UintVar(&cacheMemPerCent, "cachemempercent", 8, "Cache size (in % of process visible RAM)")
 
-	flag.UintVar(&owner, "owner", 0, "Numeric uid to use rather than current uid")
-	flag.UintVar(&group, "group", 0, "Numeric gid to use rather than current gid")
+	flag.UintVar(&owner, "owner", 0, "Numeric uid to use as entity owner rather than current uid")
+	flag.UintVar(&group, "group", 0, "Numeric gid to use as entity group rather than current gid")
 
 	flag.Parse()
 
