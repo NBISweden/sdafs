@@ -76,8 +76,6 @@ type SDAfs struct {
 	// Group is the group id we present as group
 	Group uint32
 
-	runAs uint32
-
 	// DirPerms is the permissions we present on "directories" (which are purely
 	// virtual constructs)
 	DirPerms os.FileMode
@@ -788,11 +786,9 @@ func (s *SDAfs) setup() error {
 	currentUser, err := user.Current()
 	if err == nil {
 		currentUserID := idToNum(currentUser.Uid)
-		s.runAs = currentUserID
 		s.Owner = currentUserID
 		s.Group = idToNum(currentUser.Gid)
 	} else {
-		s.runAs = fallbackUid
 		s.Owner = fallbackUid
 		s.Group = fallbackGid
 	}
