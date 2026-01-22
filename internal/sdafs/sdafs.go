@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/net/publicsuffix"
@@ -943,7 +944,7 @@ func (s *SDAfs) checkPerms(o *fuseops.OpContext) error {
 
 	// TODO: Simplified check here is enough?
 	if s.FilePerms&4 == 0 {
-		return fuse.EIO
+		return syscall.EPERM
 	}
 
 	return nil
