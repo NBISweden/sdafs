@@ -60,6 +60,11 @@ func TestConfOptions(t *testing.T) {
 	assert.Equal(t, false, c.foreground,
 		"Not default value of foreground as expected")
 
+	assert.Equal(t, false, c.sdafsconf.SpecifyGID,
+		"group wasn't passed but SpecifyGID is set")
+	assert.Equal(t, false, c.sdafsconf.SpecifyUID,
+		"owner wasn't passed but SpecifyGID is set")
+
 	os.Args = []string{"binary", "-log", "somelog", "-foreground", "mount2"}
 	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
 	flag.Parse()
@@ -154,6 +159,24 @@ func TestConfOptions(t *testing.T) {
 
 	assert.Greater(t, c.sdafsconf.CacheSize, defaultCacheWithMem,
 		"Cache with 90% of RAM not larger than with default (8%)")
+
+	os.Args = []string{"binary", "-owner", "20", "mount8"}
+	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+	flag.Parse()
+	c = getConfigs()
+	assert.Equal(t, true, c.sdafsconf.SpecifyUID,
+		"owner passed but not reflected in sdafs config")
+	assert.Equal(t, uint32(20), c.sdafsconf.UID,
+		"unexpected uid in sdafs config")
+
+	os.Args = []string{"binary", "-group", "30", "mount8"}
+	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+	flag.Parse()
+	c = getConfigs()
+	assert.Equal(t, true, c.sdafsconf.SpecifyGID,
+		"group passed but not reflected in sdafs config")
+	assert.Equal(t, uint32(30), c.sdafsconf.GID,
+		"unexpected gid in sdafs config")
 
 	os.Args = safeArgs
 
