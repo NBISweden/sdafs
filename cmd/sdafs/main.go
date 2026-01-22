@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"slices"
 
 	"github.com/pbnjay/memory"
 
@@ -75,7 +76,16 @@ func getConfigs() mainConfig {
 	flag.UintVar(&cacheSize, "cachesize", 0, "Cache size (in mb), overrides percent if set")
 	flag.UintVar(&cacheMemPerCent, "cachemempercent", 8, "Cache size (in % of process visible RAM)")
 
+	flag.UintVar(&owner, "owner", 0, "Numeric uid to use rather than current uid")
+	flag.UintVar(&group, "group", 0, "Numeric gid to use rather than current gid")
+
 	flag.Parse()
+
+	passed := make([]string, 0)
+
+	flag.Visit(func(f *flag.Flag) {
+		passed = append(passed, f.Name)
+	})
 
 	mountPoint := flag.Arg(0)
 	if mountPoint == "" || len(flag.Args()) != 1 {
@@ -120,6 +130,16 @@ func getConfigs() mainConfig {
 		ChunkSize:       uint64(chunkSize),
 		MaxRetries:      int(maxRetries),
 		ExtraCAFile:     extraCAFile,
+	}
+
+	if slices.Contains(passed, "owner") {
+		conf.SpecifyUID = true
+		conf.UID = uint32(owner)
+	}
+
+	if slices.Contains(passed, "group") {
+		conf.SpecifyGID = true
+		conf.GID = uint32(group)
 	}
 
 	if open {
