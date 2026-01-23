@@ -22,11 +22,29 @@ func (d *Driver) NodeGetInfo(_ context.Context, r *csi.NodeGetInfoRequest) (*csi
 	}, nil
 }
 
+func getNodeCapabilites() (c []*csi.NodeServiceCapability) {
+
+	for _, capability := range []csi.NodeServiceCapability_RPC_Type{
+		csi.NodeServiceCapability_RPC_VOLUME_MOUNT_GROUP,
+	} {
+
+		c = append(c, &csi.NodeServiceCapability{
+			Type: &csi.NodeServiceCapability_Rpc{
+				Rpc: &csi.NodeServiceCapability_RPC{
+					Type: capability,
+				},
+			},
+		})
+	}
+
+	return c
+}
+
 // NodeGetCapabilities reports node capabilities
 func (d *Driver) NodeGetCapabilities(_ context.Context, r *csi.NodeGetCapabilitiesRequest) (*csi.NodeGetCapabilitiesResponse, error) {
 
 	return &csi.NodeGetCapabilitiesResponse{
-		Capabilities: []*csi.NodeServiceCapability{},
+		Capabilities: getNodeCapabilites(),
 	}, nil
 }
 
@@ -48,7 +66,7 @@ func (d *Driver) NodePublishVolume(_ context.Context, r *csi.NodePublishVolumeRe
 		return nil, status.Error(codes.Unauthenticated, "Expected key not found in received Secret")
 	}
 
-	vol := &volumeInfo{ID: r.GetVolumeId(), secret: token, path: r.GetTargetPath(), context: r.GetVolumeContext()}
+	vol := &volumeInfo{ID: r.GetVolumeId(), secret: token, path: r.GetTargetPath(), context: r.GetVolumeContext(), capability: r.GetVolumeCapability()}
 	d.volumes[r.GetVolumeId()] = vol
 
 	err := d.writeToken(d, vol)

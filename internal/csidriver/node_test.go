@@ -23,7 +23,7 @@ func TestNodeGetCapabilities(t *testing.T) {
 
 	r, err := d.NodeGetCapabilities(context.TODO(), &csi.NodeGetCapabilitiesRequest{})
 	assert.Equal(t, nil, err, "Unexpected error from NodeGetCapabilities")
-	assert.Equal(t, 0, len(r.Capabilities), "Unexpected length of capabilities"+
+	assert.Equal(t, 1, len(r.Capabilities), "Unexpected length of capabilities"+
 		"from NodeGetCapabilities")
 }
 

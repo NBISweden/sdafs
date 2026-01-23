@@ -9,8 +9,14 @@ reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
 allowVolumeExpansion: false
 parameters:
+  # Possible parameters to set that csi-sdafs considers. Note that these are
+  # brought into the volume at creation time and thus replacing the
+  # StorageClass will not update existing volumes.
+  #
   # PVC should point to a secret where we can get the token
   csi.storage.k8s.io/secret-namespace: "${pvc.namespace}"
+  # It's also possible to specify the key of the secret designated above
+  # will be used to provide the authentication token.
   csi.storage.k8s.io/secret-name: "${pvc.annotations['sda.nbis.se/token-secret']}"
   # Some of the options for sdafs are supported here
   # chunksize: "5120"
@@ -27,7 +33,12 @@ parameters:
   #       DAVDZXJlczEYMBYGA1UEYQwPVkFURVMtUTI4MjYwMDRKMSwwKgYDVQQDDCNBQyBS
   #       ...
   #
-  # It's also possible to specify the key of the secret designated above
-  # will be used to provide the authentication token.
   #
   # tokenkey: "token"
+  # owner: "40000"
+  # group: "60000"
+  #
+  # In more modern setups this is managed by Kubernetes delegating the
+  # permission handling to CSI (based on VOLUME_MOUNT_GROUP), if that happens,
+  # the group value provided here will be ignored.
+  #
