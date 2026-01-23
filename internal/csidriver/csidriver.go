@@ -31,11 +31,12 @@ var VERSIONS = []string{"1.11.0", "1.0.0"}
 
 // volumeInfo keeps information about a volume
 type volumeInfo struct {
-	attached bool
-	secret   string
-	ID       string
-	path     string
-	context  map[string]string
+	attached   bool
+	secret     string
+	ID         string
+	path       string
+	context    map[string]string
+	capability *csi.VolumeCapability
 }
 
 // Driver is the main information bearer internally. We use a single struct for
@@ -448,13 +449,20 @@ func (d *Driver) CreateVolume(_ context.Context,
 		return nil, status.Error(codes.InvalidArgument, "Volume Capabilities missing in request")
 	}
 
+	mountGroup := ""
+
 	for _, cap := range caps {
 		am := cap.GetAccessMode()
 
-		if am.GetMode() != csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY &&
+		if am != nil && am.GetMode() != csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY &&
 			am.GetMode() != csi.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY {
 			klog.V(10).Infof("Unsupported requested capability %v", cap.AccessMode)
 			return nil, status.Error(codes.PermissionDenied, "Only read-only is supported")
+		}
+
+		mount := cap.GetMount()
+		if mount != nil && mount.GetVolumeMountGroup() != "" {
+			mountGroup = mount.GetVolumeMountGroup()
 		}
 	}
 
@@ -465,13 +473,27 @@ func (d *Driver) CreateVolume(_ context.Context,
 	}
 
 	context := make(map[string]string)
-	possibleParameters := []string{"chunksize", "rootURL", "cachesize",
-		"maxretries", "tokenkey", "extraca"}
-	for _, p := range possibleParameters {
-		value, found := r.GetParameters()[p]
-		if found {
-			context[p] = value
+	params := r.GetParameters()
+
+	if params != nil {
+
+		klog.V(14).Infof("Parameters for volume creation are %v", r.GetParameters())
+
+		possibleParameters := []string{"chunksize", "rootURL", "cachesize",
+			"maxretries", "tokenkey", "extraca", "owner", "group"}
+		for _, p := range possibleParameters {
+			value, found := params[p]
+			if found {
+				context[p] = value
+			}
 		}
+	} else {
+		klog.V(14).Infof("No parameters for volume")
+	}
+
+	if mountGroup != "" {
+		// CSI has precedence over specific options passed
+		context["group"] = mountGroup
 	}
 
 	return &csi.CreateVolumeResponse{

@@ -10,7 +10,10 @@ import (
 	"path"
 	"time"
 
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"golang.org/x/sys/unix"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
 )
 
@@ -110,6 +113,27 @@ func doMount(d *Driver, v *volumeInfo) error {
 		return nil
 	}
 
+	if v.capability.GetAccessMode() != nil {
+		// If we see an unexpeced access mode, we must fail
+
+		m := v.capability.GetAccessMode().Mode
+		if m != csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY &&
+			m != csi.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY {
+
+			return status.Errorf(codes.PermissionDenied, "Only read-only is supported, %s was requested", v.capability.GetAccessMode().String())
+		}
+	}
+
+	var mountGroup string
+	if v.capability.GetMount() != nil {
+		// Pick up if we are requested to use a certain group for the mount
+		// (fsGroup)
+		mg := v.capability.GetMount().GetVolumeMountGroup()
+		if mg != "" {
+			mountGroup = mg
+		}
+	}
+
 	args := []string{"--open", "--loglevel", "-16",
 		"--credentialsfile", d.getTokenFilePath(v)}
 	if d.logDir != nil && len(*d.logDir) > 0 {
@@ -127,7 +151,18 @@ func doMount(d *Driver, v *volumeInfo) error {
 		args = append(args, "--extracafile", d.getCAFilePath(v))
 	}
 
-	for _, k := range []string{"chunksize", "cachesize", "rootURL", "maxretries"} {
+	contextOptions := []string{"chunksize", "cachesize", "rootURL", "maxretries", "owner"}
+
+	if mountGroup != "" {
+		// group passed through volume mount - pass that along
+		args = append(args, "--group", mountGroup)
+	} else {
+		// group not passed through volume mount - we can respect group option
+		contextOptions = append(contextOptions, "group")
+	}
+
+	klog.V(14).Infof("VolumeContext is %v", v.context)
+	for _, k := range contextOptions {
 		if val, ok := v.context[k]; ok {
 			args = append(args, "--"+k, val)
 		}
