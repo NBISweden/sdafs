@@ -1,6 +1,7 @@
 package csidriver
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/google/uuid"
 	"github.com/tj/assert"
 )
@@ -205,6 +207,9 @@ func TestDoMount(t *testing.T) {
 	tokenDir := "/some/dir"
 	truePath := "/bin/true"
 	falsePath := "/bin/false"
+	argloggerPath := "./sdafsarglogger"
+	thisDir := "./"
+
 	nonexistant := nonExistentPath(t)
 
 	d := Driver{
@@ -261,9 +266,115 @@ func TestDoMount(t *testing.T) {
 		count++
 		t.Logf("mountpoint is called with count %v", count)
 		return count > 10
-
 	}
 	err = doMount(&d, &v)
 	assert.NotNil(t, err, "doMount should signal failure time out")
 
+	count = 0
+	d.isMountPoint = isMountPoint
+	d.waitPeriod = 1 * time.Second
+
+	v.capability = &csi.VolumeCapability{
+		AccessMode: &csi.VolumeCapability_AccessMode{
+			Mode: csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER,
+		},
+	}
+	err = doMount(&d, &v)
+	assert.NotNil(t, err, "doMount should signal failure due to write needed")
+
+	// Check handlign of mount volume capability
+
+	randomString := uuid.New().String()
+	anotherRandomString := uuid.New().String()
+
+	v.capability = &csi.VolumeCapability{
+		AccessType: &csi.VolumeCapability_Mount{Mount: &csi.VolumeCapability_MountVolume{VolumeMountGroup: randomString}},
+	}
+
+	d.sdafsPath = &argloggerPath
+
+	count = 0
+	d.isMountPoint = func(d *Driver, v *volumeInfo) bool {
+		count++
+		t.Logf("mountpoint is called with count %v", count)
+		return count > 2
+	}
+
+	err = doMount(&d, &v)
+	assert.Nil(t, err, "provided group through volumecapability did not work as expected")
+
+	groupFound, err := stringInArgsFile("--group " + randomString)
+	assert.Nil(t, err, "error checking for string in argument file")
+	assert.True(t, groupFound,
+		"Expected group parameter not found for mount capability")
+
+	v.context["owner"] = anotherRandomString
+	v.context["group"] = anotherRandomString
+
+	count = 0
+	err = doMount(&d, &v)
+	assert.Nil(t, err, "provided group through volumecapability did not work as expected")
+
+	groupFound, err = stringInArgsFile("--group " + randomString)
+	assert.Nil(t, err, "error checking for string in argument file")
+	assert.True(t, groupFound,
+		"Expected group parameter not found for mount capability when conflicting")
+
+	v.capability = &csi.VolumeCapability{}
+
+	count = 0
+	err = doMount(&d, &v)
+	assert.Nil(t, err, "provided group through volumecapability did not work as expected")
+
+	groupFound, err = stringInArgsFile("--group " + randomString)
+	assert.Nil(t, err, "error checking for string in argument file")
+	assert.False(t, groupFound,
+		"Bad group parameter not found without mount capability")
+
+	groupFound, err = stringInArgsFile("--group " + anotherRandomString)
+	assert.Nil(t, err, "error checking for string in argument file")
+	assert.True(t, groupFound,
+		"Expected group parameter not found without mount capability")
+
+	ownerFound, err := stringInArgsFile("--owner " + anotherRandomString)
+	assert.Nil(t, err, "error checking for string in argument file")
+	assert.True(t, ownerFound,
+		"Expected owner parameter not found without mount capability")
+
+	// test some other options being forwarded properly
+
+	// extraca will write the argument to be passed to tokendir, try a bad
+	// one
+	v.context["extraca"] = randomString
+	count = 0
+	err = doMount(&d, &v)
+	assert.NotNil(t, err, "extraca test did not fail as expected")
+
+	d.tokenDir = &thisDir
+	err = doMount(&d, &v)
+	assert.Nil(t, err, "extraca test did not work as expected")
+
+	extracaFound, err := stringInArgsFile("--extracafile ")
+	assert.Nil(t, err, "error checking for string in argument file")
+	assert.True(t, extracaFound,
+		"Expected extraca parameter not found")
+
+}
+
+func stringInArgsFile(lookFor string) (bool, error) {
+	f, err := os.Open("./sdafsargs")
+	if err != nil {
+		return false, fmt.Errorf("unexpected error opening argument file after capability: %v", err)
+	}
+	s, err := io.ReadAll(f)
+	if err != nil {
+		return false, fmt.Errorf("unexpected error reading argument file after capability: %v", err)
+	}
+
+	err = f.Close()
+	if err != nil {
+		return false, fmt.Errorf("unexpected error closing argument file after capability: %v", err)
+	}
+
+	return bytes.Contains(s, []byte(lookFor)), nil
 }
