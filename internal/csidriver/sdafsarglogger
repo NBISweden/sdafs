@@ -2,4 +2,4 @@
 
 p=$(dirname "$0")
 rm -f "$p/sdafsargs"
-echo "$@" > "$p/sdafsargs"
+echo "$@" >"$p/sdafsargs"
