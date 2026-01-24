@@ -282,7 +282,7 @@ func TestDoMount(t *testing.T) {
 	err = doMount(&d, &v)
 	assert.NotNil(t, err, "doMount should signal failure due to write needed")
 
-	// Check handlign of mount volume capability
+	// Check handling of mount volume capability
 
 	randomString := uuid.New().String()
 	anotherRandomString := uuid.New().String()
