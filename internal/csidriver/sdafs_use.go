@@ -113,7 +113,7 @@ func doMount(d *Driver, v *volumeInfo) error {
 		return nil
 	}
 
-	if v.capability.GetAccessMode() != nil {
+	if v.capability != nil && v.capability.GetAccessMode() != nil {
 		// If we see an unexpeced access mode, we must fail
 
 		m := v.capability.GetAccessMode().Mode
@@ -125,7 +125,7 @@ func doMount(d *Driver, v *volumeInfo) error {
 	}
 
 	var mountGroup string
-	if v.capability.GetMount() != nil {
+	if v.capability != nil && v.capability.GetMount() != nil {
 		// Pick up if we are requested to use a certain group for the mount
 		// (fsGroup)
 		mg := v.capability.GetMount().GetVolumeMountGroup()
