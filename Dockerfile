@@ -10,6 +10,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build go mod download
 
 COPY . /build
 SHELL ["/bin/bash", "-c"]
+RUN --mount=type=cache,target=/root/.cache/go-build go test ./...
 RUN --mount=type=cache,target=/root/.cache/go-build go build -buildvcs=false ./cmd/sdafs
 RUN --mount=type=cache,target=/root/.cache/go-build  go build -buildvcs=false ./cmd/csi-driver
 

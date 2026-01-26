@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path"
 	"testing"
 	"time"
@@ -121,7 +122,7 @@ func TestEnsureTargetDir(t *testing.T) {
 
 	d := Driver{}
 	v := volumeInfo{}
-	nowrite := "/cantwrite/here"
+	nowrite := "/proc/cantwrite/here"
 	exists := "/bin"
 	good := "testdirensuretarget" + uuid.New().String()
 
@@ -168,6 +169,15 @@ func TestUnmount(t *testing.T) {
 	assert.Nil(t, err, "Not mounted path is okay for unmount")
 	_, err = os.Stat(v.path)
 	assert.NotNil(t, err, "unmount should have deleted the mount directory")
+
+	cu, err := user.Current()
+	assert.Nil(t, err, "User lookup failed unexpectedly")
+
+	if cu.Uid == "0" {
+		t.Log("Running as root, won't do mount tests")
+		// Skip tests that break when running as root
+		return
+	}
 
 	v.path = "/bin"
 	err = unmount(&d, &v)
