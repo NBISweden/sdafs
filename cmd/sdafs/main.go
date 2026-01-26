@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strings"
 
 	"github.com/pbnjay/memory"
 
@@ -46,7 +47,7 @@ type mainConfig struct {
 // mainConfig makes the configuration structure from whatever sources applies
 // (currently command line flags only)
 func getConfigs() mainConfig {
-	var credentialsFile, rootURL, logFile, extraCAFile string
+	var credentialsFile, rootURL, logFile, extraCAFile, datasets string
 	var foreground, open bool
 	var maxRetries uint
 	var chunkSize uint
@@ -65,6 +66,8 @@ func getConfigs() mainConfig {
 		" defaults to sdafs.log if detached, empty string means stderr which is default for foreground")
 
 	flag.StringVar(&extraCAFile, "extracafile", "", "File with extra CAs to regard (default no extra)")
+
+	flag.StringVar(&datasets, "datasets", "", "Only expose listed datasets (comma separated list, default all)")
 
 	flag.UintVar(&maxRetries, "maxretries", 7, "Max number retries for failed transfers. "+
 		"Retries will be done with some form of backoff. Max 60")
@@ -122,6 +125,15 @@ func getConfigs() mainConfig {
 		useLogFile = "sdafs.log"
 	}
 
+	var showDatasets []string
+	if strings.TrimSpace(datasets) != "" {
+		showDatasets = strings.Split(datasets, ",")
+
+		for i := range showDatasets {
+			showDatasets[i] = strings.TrimSpace(showDatasets[i])
+		}
+	}
+
 	conf := sdafs.Conf{
 		RemoveSuffix:    true,
 		RootURL:         rootURL,
@@ -130,6 +142,7 @@ func getConfigs() mainConfig {
 		ChunkSize:       uint64(chunkSize),
 		MaxRetries:      int(maxRetries),
 		ExtraCAFile:     extraCAFile,
+		DatasetsToShow:  showDatasets,
 	}
 
 	if slices.Contains(passed, "owner") {

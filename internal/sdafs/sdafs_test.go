@@ -150,6 +150,7 @@ func TestDatasetLoad(t *testing.T) {
 		HTTPClient: http.DefaultClient}
 
 	sda, err := NewSDAfs(&c)
+	assert.Equal(t, []string{"dataset1", "dataset2", "dataset3"}, sda.datasets)
 
 	assert.Nil(t, err, "Unexpected error")
 	assert.NotNil(t, sda, "Did not get a sda when we should")
@@ -196,6 +197,20 @@ func TestDatasetLoad(t *testing.T) {
 	err = sda.checkLoaded(sda.inodes[4])
 	assert.Nil(t, err, "Unexpected error")
 	assert.Equal(t, 8, len(sda.inodes), "inodes in sda is unexpected length")
+
+	// Test if DatasetsToShow is respected and works as expected
+
+	sda.conf.DatasetsToShow = []string{"dataset3", "dataset1"}
+	sda.getDatasets()
+	assert.Equal(t, []string{"dataset1", "dataset3"}, sda.datasets)
+
+	sda.conf.DatasetsToShow = []string{}
+	sda.getDatasets()
+	assert.Equal(t, []string{"dataset1", "dataset2", "dataset3"}, sda.datasets)
+
+	sda.conf.DatasetsToShow = []string{"dataset4"}
+	sda.getDatasets()
+	assert.Equal(t, []string{}, sda.datasets)
 
 }
 

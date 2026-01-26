@@ -193,6 +193,7 @@ func TestConfOptions(t *testing.T) {
 	assert.Equal(t, uint32(20), c.sdafsconf.UID,
 		"unexpected uid in sdafs config")
 
+	// test group flag
 	os.Args = []string{"binary", "-group", "30", "mount8"}
 	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
 	flag.Parse()
@@ -201,6 +202,22 @@ func TestConfOptions(t *testing.T) {
 		"group passed but not reflected in sdafs config")
 	assert.Equal(t, uint32(30), c.sdafsconf.GID,
 		"unexpected gid in sdafs config")
+
+	// test datasets flag
+	os.Args = []string{"binary", "-datasets", "abcdefg,hijk", "mount9"}
+	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+	flag.Parse()
+	c = getConfigs()
+
+	assert.Equal(t, []string{"abcdefg", "hijk"}, c.sdafsconf.DatasetsToShow,
+		"dataset options not parsed as expected")
+
+	os.Args = []string{"binary", "mount10"}
+	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+	flag.Parse()
+	c = getConfigs()
+	assert.Equal(t, 0, len(c.sdafsconf.DatasetsToShow),
+		"Unexpected datasets limit")
 
 	os.Args = safeArgs
 

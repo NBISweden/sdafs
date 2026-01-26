@@ -130,6 +130,9 @@ type Conf struct {
 	// .c4gh suffix or not
 	RemoveSuffix bool
 
+	// DatasetsToShow limits what datasets are exposed if set
+	DatasetsToShow []string
+
 	// SpecifyUID is a flag whatever the UID should be used instead of the
 	// current user id
 	SpecifyUID bool
@@ -386,11 +389,28 @@ func (s *SDAfs) getDatasets() error {
 			err)
 	}
 
-	err = json.Unmarshal(text, &s.datasets)
+	var ds []string
+
+	err = json.Unmarshal(text, &ds)
 	if err != nil {
 		return fmt.Errorf(
 			"error while doing unmarshal of dataset list %v: %v",
 			text, err)
+	}
+
+	if len(s.conf.DatasetsToShow) == 0 {
+		// Include all datasets we can access
+		s.datasets = ds
+		return nil
+	}
+
+	// We need to filter datasets
+
+	s.datasets = make([]string, 0)
+	for i := range ds {
+		if slices.Contains(s.conf.DatasetsToShow, ds[i]) {
+			s.datasets = append(s.datasets, ds[i])
+		}
 	}
 
 	return nil
