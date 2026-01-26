@@ -201,15 +201,18 @@ func TestDatasetLoad(t *testing.T) {
 	// Test if DatasetsToShow is respected and works as expected
 
 	sda.conf.DatasetsToShow = []string{"dataset3", "dataset1"}
-	sda.getDatasets()
+	err = sda.getDatasets()
+	assert.Nil(t, err, "Unexpected error")
 	assert.Equal(t, []string{"dataset1", "dataset3"}, sda.datasets)
 
 	sda.conf.DatasetsToShow = []string{}
-	sda.getDatasets()
+	err = sda.getDatasets()
+	assert.Nil(t, err, "Unexpected error")
 	assert.Equal(t, []string{"dataset1", "dataset2", "dataset3"}, sda.datasets)
 
 	sda.conf.DatasetsToShow = []string{"dataset4"}
-	sda.getDatasets()
+	err = sda.getDatasets()
+	assert.Nil(t, err, "Unexpected error")
 	assert.Equal(t, []string{}, sda.datasets)
 
 }
