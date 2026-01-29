@@ -473,6 +473,10 @@ func (d *Driver) CreateVolume(_ context.Context,
 	}
 
 	context := make(map[string]string)
+
+	// Add some defaults
+	context["cachettl"] = "120s"
+
 	params := r.GetParameters()
 
 	if params != nil {
