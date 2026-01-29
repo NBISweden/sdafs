@@ -475,6 +475,8 @@ func (d *Driver) CreateVolume(_ context.Context,
 	context := make(map[string]string)
 
 	// Add some defaults
+	// Note: sdafs defaults to no TTL-based expiry but for CSI usage we default
+	// to keeping not very long
 	context["cachettl"] = "120s"
 
 	params := r.GetParameters()
@@ -484,7 +486,7 @@ func (d *Driver) CreateVolume(_ context.Context,
 		klog.V(14).Infof("Parameters for volume creation are %v", r.GetParameters())
 
 		possibleParameters := []string{"chunksize", "rootURL", "cachesize",
-			"maxretries", "tokenkey", "extraca", "owner", "group"}
+			"maxretries", "tokenkey", "extraca", "owner", "group", "cachettl"}
 		for _, p := range possibleParameters {
 			value, found := params[p]
 			if found {

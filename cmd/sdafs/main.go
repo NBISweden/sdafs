@@ -80,7 +80,7 @@ func getConfigs() mainConfig {
 	flag.IntVar(&logLevel, "loglevel", 0, "Loglevel, specified as per https://pkg.go.dev/log/slog#Level")
 	flag.UintVar(&cacheSize, "cachesize", 0, "Cache size (in mb), overrides percent if set")
 	flag.UintVar(&cacheMemPerCent, "cachemempercent", 8, "Cache size (in % of process visible RAM)")
-	flag.DurationVar(&cacheMaxTTL, "cachettl", 0, "Maximum time to live for cache entries in seconds (default 0 means no ttl expiry)")
+	flag.DurationVar(&cacheMaxTTL, "cachettl", 0, "Maximum time to live for cache entries (e.g. '2h', '4m30s'). Default 0 means no ttl expiry")
 
 	flag.UintVar(&owner, "owner", 0, "Numeric uid to use as entity owner rather than current uid")
 	flag.UintVar(&group, "group", 0, "Numeric gid to use as entity group rather than current gid")

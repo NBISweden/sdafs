@@ -34,7 +34,7 @@ type Conf struct {
 	// CacheSize decides how much memory (in bytes) may be used for caching
 	CacheSize uint64
 
-	// CacheMaxTTL decides the maximum lifteime of entries in cache
+	// CacheMaxTTL decides the maximum lifetime of entries in cache
 	CacheMaxTTL time.Duration
 }
 

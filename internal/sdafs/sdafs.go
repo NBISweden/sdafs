@@ -179,8 +179,8 @@ type Conf struct {
 	// bytes) may be used for caching
 	CacheSize uint64
 
-	// CacheMaxTTL sets the maximum TTL in seconds for cache entries, 0 means no
-	// ttl based expiry
+	// CacheMaxTTL sets the maximum TTL for cache entries, 0 means no
+	// TTL-based expiry
 	CacheMaxTTL time.Duration
 }
 

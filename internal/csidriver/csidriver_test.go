@@ -306,6 +306,7 @@ func TestCreateVolume(t *testing.T) {
 
 	//	Now with a valid parameter
 	params["rootURL"] = "https://example.com"
+	params["cachettl"] = "400s"
 
 	r, err = d.CreateVolume(
 		context.TODO(),
@@ -328,6 +329,10 @@ func TestCreateVolume(t *testing.T) {
 		"Context should no longer be defaults only")
 	assert.Contains(t, r.Volume.GetVolumeContext(), "rootURL",
 		"Context should have rootURL")
+	assert.Contains(t, r.Volume.GetVolumeContext(), "cachettl",
+		"Context should have cachettl")
+	assert.Equal(t, r.Volume.GetVolumeContext()["cachettl"], "400s",
+		"Bad cachettl in context")
 
 }
 
