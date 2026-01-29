@@ -301,8 +301,8 @@ func TestCreateVolume(t *testing.T) {
 	assert.Nil(t, err, "Unexpected error from CreateVolume")
 	assert.NotNil(t, r, "Unexpected response from CreateVolume")
 	assert.NotNil(t, r.Volume, "Unexpected response from CreateVolume")
-	assert.Equal(t, 0, len(r.Volume.GetVolumeContext()),
-		"Context should be empty")
+	assert.Equal(t, 1, len(r.Volume.GetVolumeContext()),
+		"Unexpected context length for defaults")
 
 	//	Now with a valid parameter
 	params["rootURL"] = "https://example.com"
@@ -324,8 +324,8 @@ func TestCreateVolume(t *testing.T) {
 	assert.Nil(t, err, "Unexpected error from CreateVolume")
 	assert.NotNil(t, r, "Unexpected response from CreateVolume")
 	assert.NotNil(t, r.Volume, "Unexpected response from CreateVolume")
-	assert.Equal(t, 1, len(r.Volume.GetVolumeContext()),
-		"Context should no longer be empty")
+	assert.Equal(t, 2, len(r.Volume.GetVolumeContext()),
+		"Context should no longer be defaults only")
 	assert.Contains(t, r.Volume.GetVolumeContext(), "rootURL",
 		"Context should have rootURL")
 

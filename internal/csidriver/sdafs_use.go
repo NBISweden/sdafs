@@ -151,7 +151,7 @@ func doMount(d *Driver, v *volumeInfo) error {
 		args = append(args, "--extracafile", d.getCAFilePath(v))
 	}
 
-	contextOptions := []string{"chunksize", "cachesize", "rootURL", "maxretries", "owner"}
+	contextOptions := []string{"chunksize", "cachesize", "rootURL", "maxretries", "owner", "cachettl"}
 
 	if mountGroup != "" {
 		// group passed through volume mount - pass that along
