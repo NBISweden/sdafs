@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/tj/assert"
 )
@@ -83,6 +84,8 @@ func TestConfOptions(t *testing.T) {
 
 	assert.Equal(t, false, c.foreground,
 		"Not default value of foreground as expected")
+
+	assert.Equal(t, time.Duration(0), c.sdafsconf.CacheMaxTTL, "Unexpected default cachettl")
 
 	assert.Equal(t, false, c.sdafsconf.SpecifyGID,
 		"group wasn't passed but SpecifyGID is set")
@@ -218,6 +221,14 @@ func TestConfOptions(t *testing.T) {
 	c = getConfigs()
 	assert.Equal(t, 0, len(c.sdafsconf.DatasetsToShow),
 		"Unexpected datasets limit")
+
+	os.Args = []string{"binary", "-cachettl", "4h20m30s", "mount11"}
+	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+	flag.Parse()
+	c = getConfigs()
+
+	assert.Equal(t, 4*time.Hour+20*time.Minute+30*time.Second, c.sdafsconf.CacheMaxTTL,
+		"Didn't pick up cachettl as expected")
 
 	os.Args = safeArgs
 

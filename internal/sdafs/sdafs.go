@@ -178,6 +178,10 @@ type Conf struct {
 	// CacheSize is carried over to httpreader and decides how much memory (in
 	// bytes) may be used for caching
 	CacheSize uint64
+
+	// CacheMaxTTL sets the maximum TTL in seconds for cache entries, 0 means no
+	// ttl based expiry
+	CacheMaxTTL time.Duration
 }
 
 // inode is the struct to manage a directory entry
@@ -923,12 +927,13 @@ func (s *SDAfs) setup() error {
 	s.extraHeader.Add("SDA-Client-Version", sdaCliVersion)
 
 	s.httpReaderConf = &httpreader.Conf{
-		Token:      s.token,
-		Client:     s.client,
-		Headers:    s.extraHeader,
-		MaxRetries: s.conf.MaxRetries,
-		ChunkSize:  s.conf.ChunkSize,
-		CacheSize:  s.conf.CacheSize,
+		Token:       s.token,
+		Client:      s.client,
+		Headers:     s.extraHeader,
+		MaxRetries:  s.conf.MaxRetries,
+		ChunkSize:   s.conf.ChunkSize,
+		CacheSize:   s.conf.CacheSize,
+		CacheMaxTTL: s.conf.CacheMaxTTL,
 	}
 
 	return nil

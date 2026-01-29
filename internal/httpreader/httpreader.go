@@ -16,9 +16,6 @@ import (
 	"github.com/dgraph-io/ristretto/v2"
 )
 
-// cacheLifeTime is the maximum lifetime of an object in the cache
-const cacheLifeTime = 4 * time.Hour
-
 // Conf is the struct passed in to configure the httpreader as such
 type Conf struct {
 	// Token is the token we present for authentication
@@ -36,6 +33,9 @@ type Conf struct {
 
 	// CacheSize decides how much memory (in bytes) may be used for caching
 	CacheSize uint64
+
+	// CacheMaxTTL decides the maximum lifteime of entries in cache
+	CacheMaxTTL time.Duration
 }
 
 // Request carries information about a data request
@@ -414,7 +414,7 @@ func (r *HTTPReader) addToCache(cacheBlock *CacheBlock) {
 	key := r.getCacheKey(cacheBlock.start)
 	cacheBlock.key = &key
 
-	cache.SetWithTTL(key, cacheBlock, int64(cacheBlock.length), cacheLifeTime)
+	cache.SetWithTTL(key, cacheBlock, int64(cacheBlock.length), r.conf.CacheMaxTTL)
 }
 
 // addToOutstanding adds a prefetch to the list of outstanding prefetches once it's no longer active
