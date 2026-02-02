@@ -32,6 +32,25 @@ Armed with you configuration (e.g. in `~/Download/s3cmd.conf`), you can launch
 sdafs --credentialsfile ~/Download/s3cmd.conf /where/you/want/to/mount
 ```
 
+### FUSE Implementation Selection
+
+sdafs supports multiple FUSE library implementations through an abstraction layer:
+
+- **jacobsa/fuse** (default): A pure-Go FUSE implementation that works well on Linux systems
+- **cgofuse** (planned): A cgo-based implementation that wraps libfuse, providing cross-platform support
+
+You can select the FUSE implementation using the `--fuseimpl` flag:
+
+```bash
+# Use jacobsa/fuse (default)
+sdafs --credentialsfile ~/Download/s3cmd.conf --fuseimpl jacobsa /where/you/want/to/mount
+
+# Use cgofuse (when fully implemented)
+sdafs --credentialsfile ~/Download/s3cmd.conf --fuseimpl cgofuse /where/you/want/to/mount
+```
+
+**Note**: Currently, only `jacobsa` is fully supported. The `cgofuse` implementation is planned for future releases to provide better cross-platform compatibility.
+
 ### Tuning
 
 The amount of data asked for in each request can be tuned with `--chunksize`.

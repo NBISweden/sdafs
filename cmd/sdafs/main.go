@@ -38,18 +38,19 @@ func usage() {
 
 // mainConfig holds the configuration
 type mainConfig struct {
-	mountPoint string
-	foreground bool
-	logFile    string
-	sdafsconf  *sdafs.Conf
-	open       bool
-	logLevel   slog.Level
+	mountPoint    string
+	foreground    bool
+	logFile       string
+	sdafsconf     *sdafs.Conf
+	open          bool
+	logLevel      slog.Level
+	fuseImpl      string
 }
 
 // mainConfig makes the configuration structure from whatever sources applies
 // (currently command line flags only)
 func getConfigs() mainConfig {
-	var credentialsFile, rootURL, logFile, extraCAFile, datasets string
+	var credentialsFile, rootURL, logFile, extraCAFile, datasets, fuseImpl string
 	var foreground, open bool
 	var maxRetries uint
 	var chunkSize uint
@@ -71,6 +72,8 @@ func getConfigs() mainConfig {
 	flag.StringVar(&extraCAFile, "extracafile", "", "File with extra CAs to regard (default no extra)")
 
 	flag.StringVar(&datasets, "datasets", "", "Only expose listed datasets (comma separated list, default all)")
+	
+	flag.StringVar(&fuseImpl, "fuseimpl", "jacobsa", "FUSE implementation to use: 'jacobsa' or 'cgofuse' (default: jacobsa)")
 
 	flag.UintVar(&maxRetries, "maxretries", 7, "Max number retries for failed transfers. "+
 		"Retries will be done with some form of backoff. Max 60")
@@ -185,12 +188,14 @@ func getConfigs() mainConfig {
 		conf.CacheSize = uint64(cacheSize * 1024 * 1024)
 	}
 
-	m := mainConfig{mountPoint: mountPoint,
+	m := mainConfig{
+		mountPoint: mountPoint,
 		sdafsconf:  &conf,
 		foreground: foreground,
 		logFile:    useLogFile,
 		open:       open,
 		logLevel:   slog.Level(logLevel),
+		fuseImpl:   fuseImpl,
 	}
 
 	return m
@@ -254,8 +259,20 @@ func checkMountDir(m mainConfig) {
 func main() {
 	c := getConfigs()
 	
-	// Create FUSE adapter (jacobsa by default, could be made configurable)
-	adapter := jacobsa.NewAdapter()
+	// Create FUSE adapter based on configuration
+	var adapter fuseadapter.FUSEAdapter
+	switch c.fuseImpl {
+	case "jacobsa":
+		adapter = jacobsa.NewAdapter()
+		slog.Info("Using jacobsa/fuse implementation")
+	case "cgofuse":
+		log.Fatalf("cgofuse implementation is not yet fully supported. Please use 'jacobsa' for now.")
+		// TODO: When cgofuse is fully implemented:
+		// adapter = cgofuse.NewAdapter()
+		// slog.Info("Using cgofuse implementation")
+	default:
+		log.Fatalf("Unknown FUSE implementation: %s. Supported values are 'jacobsa' or 'cgofuse'", c.fuseImpl)
+	}
 	
 	mountConfig := &fuseadapter.MountConfig{
 		ReadOnly:                  true,
