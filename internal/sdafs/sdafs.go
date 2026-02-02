@@ -26,11 +26,9 @@ import (
 
 	"golang.org/x/net/publicsuffix"
 
+	"github.com/NBISweden/sdafs/internal/fuseadapter"
+	"github.com/NBISweden/sdafs/internal/fuseadapter/jacobsautil"
 	"github.com/NBISweden/sdafs/internal/httpreader"
-
-	"github.com/jacobsa/fuse"
-	"github.com/jacobsa/fuse/fuseops"
-	"github.com/jacobsa/fuse/fuseutil"
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/streaming"
 	"gopkg.in/ini.v1"
@@ -53,7 +51,7 @@ const fallbackGid = 0
 
 // SDAfs is the main structure to keep track of our SDA connection
 type SDAfs struct {
-	fuseutil.NotImplementedFileSystem
+	fuseadapter.FileSystemBase
 	conf *Conf
 
 	// datasets will be loaded at start to the datasets we have access to
@@ -84,9 +82,9 @@ type SDAfs struct {
 	FilePerms os.FileMode
 
 	// inodes is used to keep track of the filesystem view we offer
-	inodes map[fuseops.InodeID]*inode
+	inodes map[fuseadapter.InodeID]*inode
 	// nextInode is the next inode number to be used
-	nextInode fuseops.InodeID
+	nextInode fuseadapter.InodeID
 
 	// startTime keeps track of when we started and use that as time stamp when
 	// nothing better is offered
@@ -100,7 +98,7 @@ type SDAfs struct {
 	maplock sync.RWMutex
 
 	// handles is used to keep track of open "files"
-	handles map[fuseops.HandleID]io.ReadSeekCloser
+	handles map[fuseadapter.HandleID]io.ReadSeekCloser
 
 	// extraHeader is an extra header we add on requests, we put cookies
 	// we should use there
@@ -186,7 +184,7 @@ type Conf struct {
 
 // inode is the struct to manage a directory entry
 type inode struct {
-	attr fuseops.InodeAttributes
+	attr fuseadapter.InodeAttributes
 
 	// dir determines whatever the inode represents a "directory" (which does
 	// not correspond to anything in the sensitive data archive)
@@ -205,10 +203,10 @@ type inode struct {
 	dataset string
 
 	// entries contains the children for an inode representing a directory
-	entries []fuseutil.Dirent
+	entries []fuseadapter.Dirent
 
 	// id is the id of this inode
-	id fuseops.InodeID
+	id fuseadapter.InodeID
 
 	// fileSize is the decrypted file size of the object for inodes representing
 	// objects
@@ -226,7 +224,7 @@ type inode struct {
 const traceLevel = -12
 
 // addInode adds the passed inode with a new id
-func (s *SDAfs) addInode(n *inode) fuseops.InodeID {
+func (s *SDAfs) addInode(n *inode) fuseadapter.InodeID {
 
 	s.maplock.Lock()
 	i := s.nextInode
@@ -239,7 +237,7 @@ func (s *SDAfs) addInode(n *inode) fuseops.InodeID {
 }
 
 // getInode fetches a specific inode
-func (s *SDAfs) getInode(n fuseops.InodeID) *inode {
+func (s *SDAfs) getInode(n fuseadapter.InodeID) *inode {
 	s.maplock.RLock()
 	defer s.maplock.RUnlock()
 
@@ -247,7 +245,7 @@ func (s *SDAfs) getInode(n fuseops.InodeID) *inode {
 }
 
 // getInodeOK fetches an inode and whatever it was found or not
-func (s *SDAfs) getInodeOK(n fuseops.InodeID) (*inode, bool) {
+func (s *SDAfs) getInodeOK(n fuseadapter.InodeID) (*inode, bool) {
 	s.maplock.RLock()
 	defer s.maplock.RUnlock()
 
@@ -259,21 +257,17 @@ func (s *SDAfs) getInodeOK(n fuseops.InodeID) (*inode, bool) {
 func (s *SDAfs) initMaps() {
 
 	if s.inodes == nil {
-		s.inodes = make(map[fuseops.InodeID]*inode)
+		s.inodes = make(map[fuseadapter.InodeID]*inode)
 	}
 
 	if s.nextInode == 0 {
-		s.nextInode = fuseops.RootInodeID
+		s.nextInode = fuseadapter.RootInodeID
 	}
 
 	if s.handles == nil {
-		s.handles = make(map[fuseops.HandleID]io.ReadSeekCloser)
+		s.handles = make(map[fuseadapter.HandleID]io.ReadSeekCloser)
 	}
 
-}
-
-func (s *SDAfs) GetFileSystemServer() fuse.Server {
-	return fuseutil.NewFileSystemServer(s)
 }
 
 // readToken extracts the token from the credentials file
@@ -553,9 +547,9 @@ func (s *SDAfs) createRoot() {
 		return
 	}
 
-	entries := make([]fuseutil.Dirent, 0)
+	entries := make([]fuseadapter.Dirent, 0)
 
-	dirAttrs := fuseops.InodeAttributes{
+	dirAttrs := fuseadapter.InodeAttributes{
 		Nlink: 1,
 		Mode:  s.DirPerms | os.ModeDir,
 		Uid:   s.Owner,
@@ -581,10 +575,11 @@ func (s *SDAfs) createRoot() {
 
 		in := s.addInode(&datasetInode)
 
-		e := fuseutil.Dirent{
-			Offset: fuseops.DirOffset(i + 1), // #nosec G115
+		e := fuseadapter.Dirent{
+			Offset: fuseadapter.DirOffset(i + 1), // #nosec G115
 			Inode:  in,
 			Name:   dataset,
+			Type:   fuseadapter.DT_Dir,
 		}
 
 		entries = append(entries, e)
@@ -606,7 +601,7 @@ func (s *SDAfs) loadDataset(dataSetName string) error {
 
 	// Find the inode to attach stuff to by looking at the root and checking
 	// entries
-	for _, in := range s.getInode(fuseops.RootInodeID).entries {
+	for _, in := range s.getInode(fuseadapter.RootInodeID).entries {
 		if in.Name == dataSetName {
 			datasetBase = s.getInode(in.Inode)
 
@@ -697,7 +692,7 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 		// to parent
 
 		dirInode := inode{
-			attr: fuseops.InodeAttributes{
+			attr: fuseadapter.InodeAttributes{
 				Nlink: 1,
 				Mode:  s.DirPerms | os.ModeDir,
 				Uid:   s.Owner,
@@ -709,7 +704,7 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 			dir:     true,
 			dataset: dataSetName,
 			key:     consider,
-			entries: make([]fuseutil.Dirent, 0),
+			entries: make([]fuseadapter.Dirent, 0),
 		}
 
 		dIn := s.addInode(&dirInode)
@@ -717,10 +712,11 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 
 		parentInode := s.getInode(dirs[parent].id)
 
-		newEntry := fuseutil.Dirent{
-			Offset: fuseops.DirOffset(len(parentInode.entries) + 1), // #nosec G115
+		newEntry := fuseadapter.Dirent{
+			Offset: fuseadapter.DirOffset(len(parentInode.entries) + 1), // #nosec G115
 			Inode:  dIn,
 			Name:   split[i-1],
+			Type:   fuseadapter.DT_Dir,
 		}
 
 		parentInode.entries = append(parentInode.entries, newEntry)
@@ -757,7 +753,7 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 	dirName := filepath.Join(split[:len(split)-1]...)
 
 	fInode := inode{
-		attr: fuseops.InodeAttributes{
+		attr: fuseadapter.InodeAttributes{
 			Nlink: 1,
 			Uid:   s.Owner,
 			Gid:   s.Group,
@@ -777,10 +773,11 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 
 	parentInode := s.getInode(dirs[dirName].id)
 
-	newEntry := fuseutil.Dirent{
-		Offset: fuseops.DirOffset(len(parentInode.entries) + 1), // #nosec G115
+	newEntry := fuseadapter.Dirent{
+		Offset: fuseadapter.DirOffset(len(parentInode.entries) + 1), // #nosec G115
 		Inode:  fIn,
 		Name:   entry.strippedName,
+		Type:   fuseadapter.DT_File,
 	}
 
 	parentInode.entries = append(parentInode.entries, newEntry)
@@ -958,7 +955,7 @@ func (s *SDAfs) VerifyCredentials() error {
 }
 
 // checkPerms verifies that the operation
-func (s *SDAfs) checkPerms(o *fuseops.OpContext) error {
+func (s *SDAfs) checkPerms(o *fuseadapter.OpContext) error {
 	if s.Owner == o.Uid {
 		return nil
 	}
@@ -969,18 +966,16 @@ func (s *SDAfs) checkPerms(o *fuseops.OpContext) error {
 	}
 
 	return nil
-
-	// return fuse.EINVAL?
 }
 
 // GetInodeAttributes fills in the required attributes for the given inode
 func (s *SDAfs) GetInodeAttributes(
 	_ context.Context,
-	op *fuseops.GetInodeAttributesOp) error {
+	op *fuseadapter.GetInodeAttributesOp) error {
 
 	in, ok := s.getInodeOK(op.Inode)
 	if !ok {
-		return fuse.ENOENT
+		return fuseadapter.ErrNoEntry
 	}
 
 	op.Attributes = in.attr
@@ -1025,11 +1020,11 @@ func (s *SDAfs) checkLoaded(i *inode) error {
 
 func (s *SDAfs) LookUpInode(
 	_ context.Context,
-	op *fuseops.LookUpInodeOp) error {
+	op *fuseadapter.LookUpInodeOp) error {
 
 	parent, ok := s.inodes[op.Parent]
 	if !ok {
-		return fuse.ENOENT
+		return fuseadapter.ErrNoEntry
 	}
 
 	if parent.key == "/" {
@@ -1038,7 +1033,7 @@ func (s *SDAfs) LookUpInode(
 		if err != nil {
 			slog.Info("Returning EIO from LookUpInode",
 				"requestedname", op.Name)
-			return fuse.EIO
+			return fuseadapter.ErrIO
 		}
 	}
 
@@ -1055,7 +1050,7 @@ func (s *SDAfs) LookUpInode(
 
 	// Not found in list
 	if !found {
-		return fuse.ENOENT
+		return fuseadapter.ErrNoEntry
 	}
 
 	// Copy over information.
@@ -1067,7 +1062,7 @@ func (s *SDAfs) LookUpInode(
 
 func (s *SDAfs) StatFS(
 	_ context.Context,
-	op *fuseops.StatFSOp) error {
+	op *fuseadapter.StatFSOp) error {
 	// TODO: Should we fill this in better?
 
 	op.BlockSize = 65536
@@ -1078,7 +1073,7 @@ func (s *SDAfs) StatFS(
 // OpenFile provides open(2)
 func (s *SDAfs) OpenFile(
 	_ context.Context,
-	op *fuseops.OpenFileOp) error {
+	op *fuseadapter.OpenFileOp) error {
 
 	err := s.checkPerms(&op.OpContext)
 	if err != nil {
@@ -1094,12 +1089,12 @@ func (s *SDAfs) OpenFile(
 	if !found {
 		slog.Info("OpenFile of non-existent file", "inode", op.Inode)
 
-		return fuse.EEXIST
+		return fuseadapter.ErrExist
 	}
 
 	if in.dir {
 		slog.Info("OpenFile of directory", "inode", op.Inode)
-		return fuse.EINVAL
+		return fuseadapter.ErrInvalid
 	}
 
 	r, err := httpreader.NewHTTPReader(s.httpReaderConf,
@@ -1109,7 +1104,7 @@ func (s *SDAfs) OpenFile(
 		slog.Error("OpenFile failed - error while creating reader",
 			"key", in.key,
 			"error", err)
-		return fuse.EIO
+		return fuseadapter.ErrIO
 	}
 
 	var inodeReader io.ReadSeekCloser
@@ -1169,14 +1164,14 @@ func getRandomID() (uint64, error) {
 }
 
 // getNewIdLocked generates an id that isn't previously used
-func (s *SDAfs) getNewIDLocked() (fuseops.HandleID, error) {
+func (s *SDAfs) getNewIDLocked() (fuseadapter.HandleID, error) {
 	for {
 		newID, err := getRandomID()
 		if err != nil {
 			return 0, fmt.Errorf("couldn't make random id: %v", err)
 		}
 
-		id := fuseops.HandleID(newID)
+		id := fuseadapter.HandleID(newID)
 		_, exist := s.handles[id]
 		if !exist {
 			return id, nil
@@ -1259,14 +1254,14 @@ func (s *SDAfs) getTotalSize(i *inode) uint64 {
 
 func (s *SDAfs) ReadFile(
 	_ context.Context,
-	op *fuseops.ReadFileOp) error {
+	op *fuseadapter.ReadFileOp) error {
 
 	r, exist := s.handles[op.Handle]
 
 	if !exist {
 		slog.Info("ReadFile called for handle that doesn't exist",
 			"handle", op.Handle)
-		return fuse.EIO
+		return fuseadapter.ErrIO
 	}
 
 	pos, err := r.Seek(op.Offset, io.SeekStart)
@@ -1274,7 +1269,7 @@ func (s *SDAfs) ReadFile(
 		slog.Info("Seek failed or didn't return expected result",
 			"handle", op.Handle,
 			"error", err)
-		return fuse.EIO
+		return fuseadapter.ErrIO
 	}
 
 	op.BytesRead, err = r.Read(op.Dst)
@@ -1294,7 +1289,7 @@ func (s *SDAfs) ReadFile(
 }
 func (s *SDAfs) OpenDir(
 	_ context.Context,
-	op *fuseops.OpenDirOp) error {
+	op *fuseadapter.OpenDirOp) error {
 
 	// Just check if access is allowed
 	return s.checkPerms(&op.OpContext)
@@ -1302,19 +1297,19 @@ func (s *SDAfs) OpenDir(
 
 func (s *SDAfs) ReadDir(
 	_ context.Context,
-	op *fuseops.ReadDirOp) error {
+	op *fuseadapter.ReadDirOp) error {
 
 	info, ok := s.getInodeOK(op.Inode)
 	if !ok {
 		slog.Info("ReadDir called for non-existant directory",
 			"inode", op.Inode)
-		return fuse.ENOENT
+		return fuseadapter.ErrNoEntry
 	}
 
 	if !info.dir {
 		slog.Info("ReadDir called for something that is not a directory",
 			"inode", op.Inode)
-		return fuse.EIO
+		return fuseadapter.ErrIO
 	}
 
 	if info.key == "/" {
@@ -1323,20 +1318,20 @@ func (s *SDAfs) ReadDir(
 			slog.Error("ReadDir failed loading dataset",
 				"dataset", info.dataset,
 				"error", err)
-			return fuse.EIO
+			return fuseadapter.ErrIO
 		}
 	}
 
 	entries := info.entries
 
-	if op.Offset > fuseops.DirOffset(len(entries)) {
+	if op.Offset > fuseadapter.DirOffset(len(entries)) {
 		return nil
 	}
 
 	entries = entries[op.Offset:]
 
 	for _, entry := range entries {
-		n := fuseutil.WriteDirent(op.Dst[op.BytesRead:], entry)
+		n := jacobsautil.WriteDirent(op.Dst[op.BytesRead:], entry)
 		if n == 0 {
 			break
 		}

@@ -15,8 +15,9 @@ import (
 
 	"github.com/pbnjay/memory"
 
+	"github.com/NBISweden/sdafs/internal/fuseadapter"
+	"github.com/NBISweden/sdafs/internal/fuseadapter/jacobsa"
 	"github.com/NBISweden/sdafs/internal/sdafs"
-	"github.com/jacobsa/fuse"
 	"github.com/sevlyar/go-daemon"
 )
 
@@ -252,9 +253,12 @@ func checkMountDir(m mainConfig) {
 
 func main() {
 	c := getConfigs()
-	mountConfig := &fuse.MountConfig{
+	
+	// Create FUSE adapter (jacobsa by default, could be made configurable)
+	adapter := jacobsa.NewAdapter()
+	
+	mountConfig := &fuseadapter.MountConfig{
 		ReadOnly:                  true,
-		FuseImpl:                  fuse.FUSEImplMacFUSE,
 		DisableDefaultPermissions: true,
 		FSName:                    fmt.Sprintf("SDA_%s", c.sdafsconf.RootURL),
 		VolumeName:                fmt.Sprintf("SDA mount of %s", c.sdafsconf.RootURL),
@@ -275,23 +279,22 @@ func main() {
 	repointLog(c)
 	detachIfNeeded(c)
 
-	mount, err := fuse.Mount(c.mountPoint, fs.GetFileSystemServer(), mountConfig)
+	mount, err := adapter.Mount(c.mountPoint, fs, mountConfig)
 	if err != nil {
 		log.Fatalf("Mount of sda at %s failed: %v", c.sdafsconf.RootURL, err)
 	}
 	slog.Info("SDA mount ready", "rootURL", c.sdafsconf.RootURL, "mountpoint", c.mountPoint)
 
-	afterMount(c, mount)
+	afterMount(c, mount, adapter)
 	slog.Info("SDA unmounted", "mountpoint", c.mountPoint)
 }
 
 // afterMount does what happens after mount, essentially wait for a signal or
 // for the file system to be unmounted
-func afterMount(c mainConfig, mount *fuse.MountedFileSystem) {
+func afterMount(c mainConfig, mount fuseadapter.MountedFileSystem, adapter fuseadapter.FUSEAdapter) {
 	ch := make(chan os.Signal, 1)
-	go handleSignals(ch, c.mountPoint)
+	go handleSignals(ch, c.mountPoint, adapter)
 	signal.Notify(ch, os.Interrupt)
-	// signal.Notify(c, os.Ter)
 
 	err := mount.Join(context.Background())
 	if err != nil {
@@ -300,13 +303,13 @@ func afterMount(c mainConfig, mount *fuse.MountedFileSystem) {
 }
 
 // Signal handler for interrupt, should try to unmount the filesystem
-func handleSignals(c chan os.Signal, m string) {
+func handleSignals(c chan os.Signal, m string, adapter fuseadapter.FUSEAdapter) {
 	for {
 		s := <-c
 
 		slog.Debug("Received signal exiting", "signal", s)
 		// TODO: Retry on failure?
-		err := fuse.Unmount(m)
+		err := adapter.Unmount(m)
 		if err != nil {
 			slog.Error("Unmounting failed", "err", err)
 			os.Exit(1)
