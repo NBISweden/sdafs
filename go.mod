@@ -13,6 +13,7 @@ require (
 	github.com/sevlyar/go-daemon v0.1.6
 	github.com/stretchr/testify v1.11.1
 	github.com/tj/assert v0.0.3
+	github.com/winfsp/cgofuse v1.6.0
 	golang.org/x/net v0.49.0
 	golang.org/x/sys v0.40.0
 	google.golang.org/grpc v1.78.0
