@@ -575,6 +575,8 @@ func (s *SDAfs) createRoot() {
 
 		in := s.addInode(&datasetInode)
 
+		// Type field is now required by the abstraction layer to properly
+		// serialize directory entries for different FUSE implementations
 		e := fuseadapter.Dirent{
 			Offset: fuseadapter.DirOffset(i + 1), // #nosec G115
 			Inode:  in,

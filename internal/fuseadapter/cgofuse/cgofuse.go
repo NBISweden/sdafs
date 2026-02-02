@@ -1,4 +1,4 @@
-// +build cgofuse
+//go:build cgofuse
 
 // Package cgofuse provides a FUSE adapter implementation using cgofuse library
 package cgofuse

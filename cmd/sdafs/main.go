@@ -72,7 +72,6 @@ func getConfigs() mainConfig {
 	flag.StringVar(&extraCAFile, "extracafile", "", "File with extra CAs to regard (default no extra)")
 
 	flag.StringVar(&datasets, "datasets", "", "Only expose listed datasets (comma separated list, default all)")
-	
 	flag.StringVar(&fuseImpl, "fuseimpl", "jacobsa", "FUSE implementation to use: 'jacobsa' or 'cgofuse' (default: jacobsa)")
 
 	flag.UintVar(&maxRetries, "maxretries", 7, "Max number retries for failed transfers. "+
