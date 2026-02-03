@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/google/uuid"
 	"github.com/tj/assert"
 )
@@ -43,8 +42,8 @@ func TestWriteExtraCA(t *testing.T) {
 	assert.NotNil(t, err, "No extra CA passed, writeExtraCA should fail")
 
 	// Let's try it with data but a bad path
-	v.context = make(map[string]string)
-	v.context["extraca"] = "somedata"
+	v.Context = make(map[string]string)
+	v.Context["extraca"] = "somedata"
 	err = d.writeExtraCA(&v)
 	assert.NotNil(t, err, "Bad write path, writeExtraCA should fail")
 
@@ -60,7 +59,7 @@ func TestWriteExtraCA(t *testing.T) {
 	readback, err := io.ReadAll(f)
 	assert.Nil(t, err, "Unexpected read failure")
 
-	assert.Equal(t, []byte(v.context["extraca"]), readback,
+	assert.Equal(t, []byte(v.Context["extraca"]), readback,
 		"Data from extra CA file doesn't match expected contents")
 
 	err = f.Close()
@@ -90,7 +89,7 @@ func TestWriteToken(t *testing.T) {
 
 	v := volumeInfo{
 		ID:     uuid.New().String(),
-		secret: uuid.New().String(),
+		Secret: uuid.New().String(),
 	}
 
 	err := writeToken(&d, &v)
@@ -108,7 +107,7 @@ func TestWriteToken(t *testing.T) {
 	defer f.Close() // nolint:errcheck
 
 	assert.Equal(t,
-		fmt.Sprintf("access_token = %s\n\n", v.secret),
+		fmt.Sprintf("access_token = %s\n\n", v.Secret),
 		string(data),
 		"Token in file not as expected")
 
@@ -126,17 +125,17 @@ func TestEnsureTargetDir(t *testing.T) {
 	exists := "/bin"
 	good := "testdirensuretarget" + uuid.New().String()
 
-	v.path = nowrite
+	v.Path = nowrite
 	err := d.ensureTargetDir(&v)
 	assert.NotNil(t, err, "Unexpected lack of error from EnsureTargetDir fail")
 
-	v.path = exists
+	v.Path = exists
 	err = d.ensureTargetDir(&v)
 	assert.Nil(t, err, "Unexpected error from EnsureTargetDir exist case")
 
 	defer os.Remove(good) // nolint:errcheck
 
-	v.path = good
+	v.Path = good
 	err = d.ensureTargetDir(&v)
 	assert.Nil(t, err, "Unexpected error from EnsureTargetDir good case")
 
@@ -154,20 +153,20 @@ func TestUnmount(t *testing.T) {
 	}
 
 	// Non-existant is fine
-	v := volumeInfo{path: nonExistentPath(t)}
+	v := volumeInfo{Path: nonExistentPath(t)}
 	err := unmount(&d, &v)
 	assert.Nil(t, err, "Nonexistant path is okay for unmount")
 
 	// So is unmounted existant
-	v.path = "testdirunmount" + uuid.New().String()
+	v.Path = "testdirunmount" + uuid.New().String()
 	err = d.ensureTargetDir(&v)
 	assert.Nil(t, err, "ensureTargetDir failed for testing unmount")
 
-	defer os.Remove(v.path) // nolint:errcheck
+	defer os.Remove(v.Path) // nolint:errcheck
 
 	err = unmount(&d, &v)
 	assert.Nil(t, err, "Not mounted path is okay for unmount")
-	_, err = os.Stat(v.path)
+	_, err = os.Stat(v.Path)
 	assert.NotNil(t, err, "unmount should have deleted the mount directory")
 
 	cu, err := user.Current()
@@ -179,7 +178,7 @@ func TestUnmount(t *testing.T) {
 		return
 	}
 
-	v.path = "/bin"
+	v.Path = "/bin"
 	err = unmount(&d, &v)
 	assert.NotNil(t, err, "Cleanup should have failed and been signalled")
 
@@ -189,7 +188,7 @@ func TestUnmount(t *testing.T) {
 		return
 	}
 
-	v.path = "/proc"
+	v.Path = "/proc"
 	err = unmount(&d, &v)
 	assert.NotNil(t, err, "We should have gotten a failure")
 }
@@ -197,7 +196,7 @@ func TestUnmount(t *testing.T) {
 func TestIsMountPoint(t *testing.T) {
 
 	d := Driver{}
-	v := volumeInfo{path: nonExistentPath(t)}
+	v := volumeInfo{Path: nonExistentPath(t)}
 	ismp := isMountPoint(&d, &v)
 	assert.False(t, ismp, "Nonexistant path is not mount point")
 
@@ -207,7 +206,7 @@ func TestIsMountPoint(t *testing.T) {
 		return
 	}
 
-	v.path = "/proc"
+	v.Path = "/proc"
 	ismp = isMountPoint(&d, &v)
 	assert.True(t, ismp, "Actual mount point should yield true")
 }
@@ -229,8 +228,8 @@ func TestDoMount(t *testing.T) {
 		maxWaitMount: 30 * time.Millisecond,
 	}
 	v := volumeInfo{
-		path:    nonExistentPath(t),
-		context: make(map[string]string),
+		Path:    nonExistentPath(t),
+		Context: make(map[string]string),
 	}
 
 	err := doMount(&d, &v)
@@ -242,12 +241,12 @@ func TestDoMount(t *testing.T) {
 		return
 	}
 
-	v.path = "/proc"
+	v.Path = "/proc"
 	err = doMount(&d, &v)
 	assert.Nil(t, err, "doMount should work when path is already mounted")
 
-	v.path = "testdirmount" + uuid.New().String()
-	defer os.Remove(v.path) // nolint:errcheck
+	v.Path = "testdirmount" + uuid.New().String()
+	defer os.Remove(v.Path) // nolint:errcheck
 
 	err = doMount(&d, &v)
 	assert.NotNil(t, err, "Should fail if sdafs is bad")
@@ -284,23 +283,10 @@ func TestDoMount(t *testing.T) {
 	d.isMountPoint = isMountPoint
 	d.waitPeriod = 1 * time.Second
 
-	v.capability = &csi.VolumeCapability{
-		AccessMode: &csi.VolumeCapability_AccessMode{
-			Mode: csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER,
-		},
-	}
-	err = doMount(&d, &v)
-	assert.NotNil(t, err, "doMount should signal failure due to write needed")
-
-	// Check handling of mount volume capability
-
 	randomString := uuid.New().String()
 	anotherRandomString := uuid.New().String()
 
-	v.capability = &csi.VolumeCapability{
-		AccessType: &csi.VolumeCapability_Mount{Mount: &csi.VolumeCapability_MountVolume{VolumeMountGroup: randomString}},
-	}
-
+	v.Group = randomString
 	d.sdafsPath = &argloggerPath
 
 	count = 0
@@ -311,15 +297,15 @@ func TestDoMount(t *testing.T) {
 	}
 
 	err = doMount(&d, &v)
-	assert.Nil(t, err, "provided group through volumecapability did not work as expected")
+	assert.Nil(t, err, "provided group through Group did not work as expected")
 
 	groupFound, err := stringInArgsFile("--group " + randomString)
 	assert.Nil(t, err, "error checking for string in argument file")
 	assert.True(t, groupFound,
 		"Expected group parameter not found for mount capability")
 
-	v.context["owner"] = anotherRandomString
-	v.context["group"] = anotherRandomString
+	v.Context["owner"] = anotherRandomString
+	v.Context["group"] = anotherRandomString
 
 	count = 0
 	err = doMount(&d, &v)
@@ -330,11 +316,11 @@ func TestDoMount(t *testing.T) {
 	assert.True(t, groupFound,
 		"Expected group parameter not found for mount capability when conflicting")
 
-	v.capability = &csi.VolumeCapability{}
+	v.Group = ""
 
 	count = 0
 	err = doMount(&d, &v)
-	assert.Nil(t, err, "provided group through volumecapability did not work as expected")
+	assert.Nil(t, err, "provided no Group did not work as expected")
 
 	groupFound, err = stringInArgsFile("--group " + randomString)
 	assert.Nil(t, err, "error checking for string in argument file")
@@ -355,7 +341,7 @@ func TestDoMount(t *testing.T) {
 
 	// extraca will write the argument to be passed to tokendir, try a bad
 	// one
-	v.context["extraca"] = randomString
+	v.Context["extraca"] = randomString
 	count = 0
 	err = doMount(&d, &v)
 	assert.NotNil(t, err, "extraca test did not fail as expected")

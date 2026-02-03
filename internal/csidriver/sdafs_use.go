@@ -1,6 +1,7 @@
 package csidriver
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,12 +11,135 @@ import (
 	"path"
 	"time"
 
-	"github.com/container-storage-interface/spec/lib/go/csi"
 	"golang.org/x/sys/unix"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
 )
+
+// loadPersisted reads in information about persisted mounts and
+// refreshes them
+func (d *Driver) loadPersisted() error {
+
+	// Not set - no persistence so nothing to do
+	if d.persistDir == nil || len(*d.persistDir) == 0 {
+		return nil
+	}
+
+	_, err := os.Stat(*d.persistDir)
+	if os.IsNotExist(err) {
+		return fmt.Errorf(
+			"error while checking existence of persistence dir: %v", err)
+	}
+
+	dents, err := os.ReadDir(*d.persistDir)
+	if err != nil {
+		return fmt.Errorf("error while reading persistence dir: %v", err)
+	}
+
+	for _, dent := range dents {
+		err := d.loadOnePersist(path.Join(*d.persistDir, dent.Name()))
+
+		if err != nil {
+			klog.V(4).Infof("error while restoring persisted mounts: %v", err)
+		}
+	}
+
+	return nil
+}
+
+// loadPersist
+func (d *Driver) loadOnePersist(s string) error {
+	f, err := os.Open(s)
+
+	if err != nil {
+		return fmt.Errorf(
+			"error while opening persistent information (%s) for read: %v",
+			s, err)
+	}
+
+	defer f.Close() // nolint:errcheck
+
+	jsonData, err := io.ReadAll(f)
+	if err != nil {
+		return fmt.Errorf(
+			"error while reading persistent information from %s: %v",
+			s, err)
+	}
+
+	var v volumeInfo
+	err = json.Unmarshal(jsonData, &v)
+
+	if err != nil {
+		return fmt.Errorf(
+			"failed to unmarshal persistent information from %s: %v",
+			s, err)
+	}
+
+	d.volumes[v.ID] = &v
+
+	_ = unix.Unmount(v.Path, unix.MNT_DETACH) // nolint:errcheck
+
+	err = d.writeToken(d, &v)
+	if err != nil {
+		klog.V(10).Infof(
+			"couldn't write token secret for persisted mount: %v", err)
+
+		return fmt.Errorf("couldn't write token secret for persisted mount: %s", err)
+	}
+
+	err = d.mounter(d, &v)
+
+	if err != nil {
+		klog.V(10).Infof(
+			"couldn't restore persisted mount: %v", err)
+
+		return fmt.Errorf("couldn't restore persisted mount: %s", err)
+	}
+
+	return nil
+}
+
+func (d *Driver) writePersisted(v *volumeInfo) error {
+	// Not set - no persistence so nothing to do
+	if d.persistDir == nil || len(*d.persistDir) == 0 {
+		return nil
+	}
+
+	p := path.Join(*d.persistDir, v.ID)
+	f, err := os.Create(p)
+
+	if err != nil {
+		return fmt.Errorf(
+			"error while creating persistent information (%s): %v",
+			p, err)
+	}
+
+	defer f.Close() // nolint:errcheck
+
+	jsonData, err := json.Marshal(v)
+	for len(jsonData) > 0 {
+		n, err := f.Write(jsonData)
+		if err != nil {
+			return fmt.Errorf(
+				"error while writing persistent information (%s): %v",
+				p, err)
+		}
+
+		jsonData = jsonData[n:]
+	}
+
+	return nil
+}
+
+func (d *Driver) unPersist(v *volumeInfo) {
+	// Not set - no persistence so nothing to do
+	if d.persistDir == nil || len(*d.persistDir) == 0 {
+		return
+	}
+
+	p := path.Join(*d.persistDir, v.ID)
+	_ = os.Remove(p) // nolint:errcheck
+	return
+}
 
 // Return a suitable path for a token
 func (d *Driver) getTokenFilePath(v *volumeInfo) string {
@@ -32,7 +156,7 @@ func (d *Driver) getCAFilePath(v *volumeInfo) string {
 func writeToken(d *Driver, v *volumeInfo) error {
 	err := writeDataToFile(d,
 		d.getTokenFilePath(v),
-		[]byte("access_token = "+v.secret+"\n\n"))
+		[]byte("access_token = "+v.Secret+"\n\n"))
 
 	if err == nil {
 		return nil
@@ -42,7 +166,7 @@ func writeToken(d *Driver, v *volumeInfo) error {
 }
 
 func (d *Driver) writeExtraCA(v *volumeInfo) error {
-	data, found := v.context["extraca"]
+	data, found := v.Context["extraca"]
 	if !found {
 		return fmt.Errorf("writeExtraCA called without any passed")
 	}
@@ -99,7 +223,7 @@ func writeDataToFile(d *Driver, path string, data []byte) error {
 }
 
 func (d *Driver) ensureTargetDir(v *volumeInfo) error {
-	return os.MkdirAll(v.path, 0o700)
+	return os.MkdirAll(v.Path, 0o700)
 }
 
 func doMount(d *Driver, v *volumeInfo) error {
@@ -109,29 +233,8 @@ func doMount(d *Driver, v *volumeInfo) error {
 	// requested path is a mountpoint and decide it's good if that's the case
 
 	if d.isMountPoint(d, v) {
-		klog.V(10).Infof("Request for already mounted path at %s, considering good", v.path)
+		klog.V(10).Infof("Request for already mounted path at %s, considering good", v.Path)
 		return nil
-	}
-
-	if v.capability != nil && v.capability.GetAccessMode() != nil {
-		// If we see an unexpeced access mode, we must fail
-
-		m := v.capability.GetAccessMode().Mode
-		if m != csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY &&
-			m != csi.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY {
-
-			return status.Errorf(codes.PermissionDenied, "Only read-only is supported, %s was requested", v.capability.GetAccessMode().String())
-		}
-	}
-
-	var mountGroup string
-	if v.capability != nil && v.capability.GetMount() != nil {
-		// Pick up if we are requested to use a certain group for the mount
-		// (fsGroup)
-		mg := v.capability.GetMount().GetVolumeMountGroup()
-		if mg != "" {
-			mountGroup = mg
-		}
 	}
 
 	args := []string{"--open", "--loglevel", "-16",
@@ -141,7 +244,7 @@ func doMount(d *Driver, v *volumeInfo) error {
 		args = append(args, "--log="+logName)
 	}
 
-	_, found := v.context["extraca"]
+	_, found := v.Context["extraca"]
 	if found {
 		err := d.writeExtraCA(v)
 		if err != nil {
@@ -153,35 +256,35 @@ func doMount(d *Driver, v *volumeInfo) error {
 
 	contextOptions := []string{"chunksize", "cachesize", "rootURL", "maxretries", "owner", "cachettl"}
 
-	if mountGroup != "" {
+	if v.Group != "" {
 		// group passed through volume mount - pass that along
-		args = append(args, "--group", mountGroup)
+		args = append(args, "--group", v.Group)
 	} else {
 		// group not passed through volume mount - we can respect group option
 		contextOptions = append(contextOptions, "group")
 	}
 
-	klog.V(14).Infof("VolumeContext is %v", v.context)
+	klog.V(14).Infof("VolumeContext is %v", v.Context)
 	for _, k := range contextOptions {
-		if val, ok := v.context[k]; ok {
+		if val, ok := v.Context[k]; ok {
 			args = append(args, "--"+k, val)
 		}
 	}
 
-	args = append(args, v.path)
+	args = append(args, v.Path)
 
-	klog.V(10).Infof("Mounting sdafs at %s", v.path)
+	klog.V(10).Infof("Mounting sdafs at %s", v.Path)
 
 	klog.V(14).Infof("Running sda from %s with arguments %v", *d.sdafsPath, args)
 	c := exec.Command(*d.sdafsPath, args...)
 
 	err := d.ensureTargetDir(v)
 	if err != nil {
-		return fmt.Errorf("error while ensuring mount target %s existed: %v", v.path, err)
+		return fmt.Errorf("error while ensuring mount target %s existed: %v", v.Path, err)
 	}
 
 	// We should try to unmount if asked to
-	v.attached = true
+	v.Attached = true
 
 	errPipe, err := c.StderrPipe()
 	if err != nil {
@@ -222,7 +325,7 @@ func doMount(d *Driver, v *volumeInfo) error {
 	}
 
 	if d.isMountPoint(d, v) {
-		klog.V(10).Infof("Filesystem mounted at: %s", v.path)
+		klog.V(10).Infof("Filesystem mounted at: %s", v.Path)
 		return nil
 	}
 	klog.V(10).Infof("Filesystem wasn't mounted after %v, giving up", d.maxWaitMount)
@@ -234,14 +337,14 @@ func doMount(d *Driver, v *volumeInfo) error {
 func isMountPoint(d *Driver, v *volumeInfo) bool {
 
 	var stat unix.Stat_t
-	err := unix.Stat(v.path, &stat)
+	err := unix.Stat(v.Path, &stat)
 
 	if err != nil && errors.Is(err, fs.ErrNotExist) {
 
 		return false
 	}
 
-	parent := path.Dir(v.path)
+	parent := path.Dir(v.Path)
 	var pstat unix.Stat_t
 	perr := unix.Stat(parent, &pstat)
 
@@ -262,31 +365,32 @@ func unmount(d *Driver, v *volumeInfo) error {
 	// If mountpoint isn't there, not much to do
 
 	var stat unix.Stat_t
-	err := unix.Stat(v.path, &stat)
+	err := unix.Stat(v.Path, &stat)
 
 	if err != nil && errors.Is(err, fs.ErrNotExist) {
-		klog.V(12).Infof("unmounting skipped for %s as it doesn't exist", v.path)
-		v.attached = false
+		klog.V(12).Infof("unmounting skipped for %s as it doesn't exist", v.Path)
+		v.Attached = false
 		// Given path doesn't exist
 		return nil
 	}
 
-	klog.V(10).Infof("unmounting %s", v.path)
-	err = unix.Unmount(v.path, unix.MNT_DETACH)
+	klog.V(10).Infof("unmounting %s", v.Path)
+	err = unix.Unmount(v.Path, unix.MNT_DETACH)
 
 	if err != nil && d.isMountPoint(d, v) {
 		// Only fail if we have an actual mount point
 
-		klog.V(10).Infof("unmount of %s failed with %v, giving up", v.path, err)
-		return fmt.Errorf("unmount of %s failed: %v giving up", v.path, err)
+		klog.V(10).Infof("unmount of %s failed with %v, giving up", v.Path, err)
+		return fmt.Errorf("unmount of %s failed: %v giving up", v.Path, err)
 	}
 
-	v.attached = false
+	v.Attached = false
 
-	err = os.Remove(v.path)
+	err = os.Remove(v.Path)
 	if err != nil {
-		return fmt.Errorf("couldn't remove directory for mount %s: %v", v.path, err)
+		return fmt.Errorf("couldn't remove directory for mount %s: %v", v.Path, err)
 	}
 
+	d.unPersist(v)
 	return nil
 }

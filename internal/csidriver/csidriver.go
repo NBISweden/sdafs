@@ -31,12 +31,12 @@ var VERSIONS = []string{"1.11.0", "1.0.0"}
 
 // volumeInfo keeps information about a volume
 type volumeInfo struct {
-	attached   bool
-	secret     string
-	ID         string
-	path       string
-	context    map[string]string
-	capability *csi.VolumeCapability
+	Attached bool              `json:"attached"`
+	Secret   string            `json:"secret"`
+	ID       string            `json:"ID"`
+	Path     string            `json:"path"`
+	Context  map[string]string `json:"context"`
+	Group    string            `json:"access_mode"`
 }
 
 // Driver is the main information bearer internally. We use a single struct for
@@ -68,6 +68,10 @@ type Driver struct {
 
 	// logDir if set points to where we want to store logs
 	logDir *string
+
+	// persistDir if set points to where to read/store persistence information
+	// for recovering mounts on pod restart
+	persistDir *string
 
 	// myUid keeps track of the user id we're running as
 	myUid int
@@ -118,6 +122,10 @@ type CSIConfig struct {
 	// WorldOpen signals whatever we should make the socket we create world
 	// accessible or not
 	WorldOpen *bool
+
+	// PersistDir says where to persist mount information for recovering on pod
+	// restarts (if we should)
+	PersistDir *string
 }
 
 // registerKubelet registers the driver within kubelet
@@ -200,6 +208,7 @@ func NewDriver(config *CSIConfig) (*Driver, error) {
 		tokenDir:             config.TokenDir,
 		sdafsPath:            config.SdafsPath,
 		logDir:               config.LogDir,
+		persistDir:           config.PersistDir,
 		myUid:                uid,
 		worldOpenSocket:      *config.WorldOpen,
 		mounter:              doMount,
@@ -279,6 +288,14 @@ func (d *Driver) Run() error {
 	// Close (remove) when we're done
 	defer os.Remove(address) // nolint:errcheck
 	defer listener.Close()   // nolint:errcheck
+
+	if d.persistDir != nil && len(*d.persistDir) > 0 {
+		err = d.loadPersisted()
+		if err != nil {
+			return fmt.Errorf("error while loading persisted mountes: %v", err)
+		}
+
+	}
 
 	klog.V(4).Infof("Registering with kubelet")
 

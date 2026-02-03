@@ -54,7 +54,8 @@ func getConfig() *csidriver.CSIConfig {
 		"Kubelet device plugin registration socket")
 
 	m.TokenDir = flag.String("tokendir", "/tmp", "Where to store temporary files for tokens")
-	m.LogDir = flag.String("sdafslogdir", "/tmp", "Where to create logfiles for sdafs, none if empty")
+	m.LogDir = flag.String("sdafslogdir", "", "Where to create logfiles for sdafs, none if empty")
+	m.PersistDir = flag.String("persistdir", "", "Where to persist mount information (do not if empty)")
 
 	m.SdafsPath = flag.String("sdafspath", sdafsPathDefault(), "Path to call sdafs")
 
