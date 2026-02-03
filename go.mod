@@ -4,11 +4,11 @@ go 1.25.0
 
 require (
 	github.com/container-storage-interface/spec v1.12.0
-	github.com/dgraph-io/ristretto/v2 v2.3.0
+	github.com/dgraph-io/ristretto/v2 v2.4.0
 	github.com/google/uuid v1.6.0
 	github.com/jacobsa/fuse v0.0.0-20250702080931-3e9d24d5e3ff
 	github.com/jarcoal/httpmock v1.4.1
-	github.com/neicnordic/crypt4gh v1.14.0
+	github.com/neicnordic/crypt4gh v1.14.1
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/sevlyar/go-daemon v0.1.6
 	github.com/stretchr/testify v1.11.1
