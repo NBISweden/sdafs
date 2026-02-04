@@ -9,10 +9,12 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/NBISweden/sdafs/internal/cgofuseadapter"
 	"github.com/pbnjay/memory"
 
 	"github.com/NBISweden/sdafs/internal/sdafs"
@@ -43,6 +45,7 @@ type mainConfig struct {
 	sdafsconf  *sdafs.Conf
 	open       bool
 	logLevel   slog.Level
+	cgofuse    bool
 }
 
 // mainConfig makes the configuration structure from whatever sources applies
@@ -58,6 +61,7 @@ func getConfigs() mainConfig {
 	var logLevel int
 	var owner uint
 	var group uint
+	var cgofuse bool
 
 	home := os.Getenv("HOME")
 
@@ -74,7 +78,7 @@ func getConfigs() mainConfig {
 	flag.UintVar(&maxRetries, "maxretries", 7, "Max number retries for failed transfers. "+
 		"Retries will be done with some form of backoff. Max 60")
 	flag.BoolVar(&foreground, "foreground", false, "Do not detach, run in foreground and send log output to stdout")
-	flag.BoolVar(&open, "open", false, "Set permissions allowing access by others than the user")
+
 	flag.UintVar(&chunkSize, "chunksize", 5120, "Chunk size (in kb) used when fetching data. "+
 		"Higher values likely to give better throughput but higher latency. Min 64 Max 65536.")
 	flag.IntVar(&logLevel, "loglevel", 0, "Loglevel, specified as per https://pkg.go.dev/log/slog#Level")
@@ -84,6 +88,14 @@ func getConfigs() mainConfig {
 
 	flag.UintVar(&owner, "owner", 0, "Numeric uid to use as entity owner rather than current uid")
 	flag.UintVar(&group, "group", 0, "Numeric gid to use as entity group rather than current gid")
+
+	if runtime.GOOS != "windows" {
+		flag.BoolVar(&cgofuse, "usecgofuse", false, "Use alternate fuse layer for wider availability (implies open)")
+		flag.BoolVar(&open, "open", false, "Set permissions allowing access by others than the user")
+	} else {
+		cgofuse = true
+		open = true
+	}
 
 	flag.Parse()
 
@@ -190,6 +202,7 @@ func getConfigs() mainConfig {
 		logFile:    useLogFile,
 		open:       open,
 		logLevel:   slog.Level(logLevel),
+		cgofuse:    cgofuse,
 	}
 
 	return m
@@ -252,6 +265,7 @@ func checkMountDir(m mainConfig) {
 
 func main() {
 	c := getConfigs()
+
 	mountConfig := &fuse.MountConfig{
 		ReadOnly:                  true,
 		FuseImpl:                  fuse.FUSEImplMacFUSE,
@@ -275,7 +289,13 @@ func main() {
 	repointLog(c)
 	detachIfNeeded(c)
 
-	mount, err := fuse.Mount(c.mountPoint, fs.GetFileSystemServer(), mountConfig)
+	var mount cgofuseadapter.MountedFS
+	if !c.cgofuse {
+		mount, err = fuse.Mount(c.mountPoint, fs.GetFileSystemServer(), mountConfig)
+	} else {
+		mount, err = cgofuseadapter.Mount(c.mountPoint, fs)
+	}
+
 	if err != nil {
 		log.Fatalf("Mount of sda at %s failed: %v", c.sdafsconf.RootURL, err)
 	}
@@ -287,7 +307,7 @@ func main() {
 
 // afterMount does what happens after mount, essentially wait for a signal or
 // for the file system to be unmounted
-func afterMount(c mainConfig, mount *fuse.MountedFileSystem) {
+func afterMount(c mainConfig, mount cgofuseadapter.MountedFS) {
 	ch := make(chan os.Signal, 1)
 	go handleSignals(ch, c.mountPoint)
 	signal.Notify(ch, os.Interrupt)
