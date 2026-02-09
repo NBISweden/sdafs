@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Get fuse bindings
-        run: sudo apt update && sudo apt install --yes libfuse-dev
+        run: sudo apt update && sudo apt install --yes libfuse-dev linux-libc-dev
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
