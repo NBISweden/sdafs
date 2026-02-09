@@ -1,7 +1,9 @@
 package sdafs
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -135,6 +137,24 @@ func TestNewSDAfs(t *testing.T) {
 	sda, err = NewSDAfs(&c)
 	assert.NotNil(t, sda, "Did not get a sda when we should")
 	assert.Nil(t, err, "Unexpected error")
+}
+
+func getBaseSDA(t *testing.T) *SDAfs {
+	c := Conf{}
+
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+
+	c.CredentialsFile = "test.ini"
+	c.RootURL = "https://my.sda.local"
+	c.HTTPClient = http.DefaultClient
+
+	httpmock.RegisterResponder("GET", "https://my.sda.local/metadata/datasets",
+		httpmock.NewStringResponder(200, `["dataset1", "dataset2"]`))
+	sda, err := NewSDAfs(&c)
+
+	assert.Nil(t, err, "Unexpected error when creating SDAfs")
+	return sda
 }
 
 func TestDatasetLoad(t *testing.T) {
@@ -278,4 +298,41 @@ func TestSessionHandling(t *testing.T) {
 	err = sda.getDatasets()
 	assert.Nil(t, err, "Unexpected error")
 
+}
+
+type testReadSeekCloser struct {
+}
+
+func (testReadSeekCloser) Close() error {
+	return nil
+}
+
+func (testReadSeekCloser) Seek(int64, int) (int64, error) {
+	return 0, nil
+}
+
+func (testReadSeekCloser) Read(b []byte) (int, error) {
+	return 0, nil
+}
+
+func TestReleaseFileHandle(t *testing.T) {
+	s := &SDAfs{}
+	s.handles = make(map[HandleID]io.ReadSeekCloser, 0)
+	err := s.ReleaseFileHandle(context.TODO(), &ReleaseFileHandleOp{})
+	assert.NotNil(t, err, "Relasing an unallocated handle should fail")
+
+	s.handles[100] = testReadSeekCloser{}
+	err = s.ReleaseFileHandle(context.TODO(), &ReleaseFileHandleOp{Handle: 100})
+	assert.Nil(t, err, "Relasing an allocated handle should work")
+}
+
+func TestNewIdLocked(t *testing.T) {
+	s := &SDAfs{}
+	s.handles = make(map[HandleID]io.ReadSeekCloser, 0)
+	id, err := s.getNewIDLocked()
+	assert.Nil(t, err, "Getting a handle should work")
+
+	_, exists := s.handles[id]
+
+	assert.False(t, exists, "Handle from getNewIdLocked should not exist")
 }

@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"log/slog"
 	"os"
@@ -18,8 +20,6 @@ import (
 	"github.com/pbnjay/memory"
 
 	"github.com/NBISweden/sdafs/internal/sdafs"
-	"github.com/jacobsa/fuse"
-	"github.com/sevlyar/go-daemon"
 )
 
 var Version string = "development"
@@ -39,13 +39,14 @@ func usage() {
 
 // mainConfig holds the configuration
 type mainConfig struct {
-	mountPoint string
-	foreground bool
-	logFile    string
-	sdafsconf  *sdafs.Conf
-	open       bool
-	logLevel   slog.Level
-	cgofuse    bool
+	mountPoint     string
+	foreground     bool
+	logFile        string
+	sdafsconf      *sdafs.Conf
+	open           bool
+	logLevel       slog.Level
+	cgofuse        bool
+	cgofuseOptions string
 }
 
 // mainConfig makes the configuration structure from whatever sources applies
@@ -77,7 +78,6 @@ func getConfigs() mainConfig {
 
 	flag.UintVar(&maxRetries, "maxretries", 7, "Max number retries for failed transfers. "+
 		"Retries will be done with some form of backoff. Max 60")
-	flag.BoolVar(&foreground, "foreground", false, "Do not detach, run in foreground and send log output to stdout")
 
 	flag.UintVar(&chunkSize, "chunksize", 5120, "Chunk size (in kb) used when fetching data. "+
 		"Higher values likely to give better throughput but higher latency. Min 64 Max 65536.")
@@ -89,7 +89,15 @@ func getConfigs() mainConfig {
 	flag.UintVar(&owner, "owner", 0, "Numeric uid to use as entity owner rather than current uid")
 	flag.UintVar(&group, "group", 0, "Numeric gid to use as entity group rather than current gid")
 
+	// foregound mandatory on Windows for now
 	if runtime.GOOS != "windows" {
+		flag.BoolVar(&foreground, "foreground", false, "Do not detach, run in foreground and send log output to stdout")
+	} else {
+		foreground = true
+	}
+
+	// cgofuse mandatory on Windows, may be an option for some platforms
+	if runtime.GOOS != "windows" && cgofuseadapter.CGOFuseAvailable() {
 		flag.BoolVar(&cgofuse, "usecgofuse", false, "Use alternate fuse layer for wider availability (implies open)")
 		flag.BoolVar(&open, "open", false, "Set permissions allowing access by others than the user")
 	} else {
@@ -196,6 +204,13 @@ func getConfigs() mainConfig {
 		conf.CacheSize = uint64(cacheSize * 1024 * 1024)
 	}
 
+	if runtime.GOOS == "windows" {
+		_, err := os.Stat(mountPoint)
+		if !errors.Is(err, fs.ErrNotExist) {
+			log.Fatalf("on Windows, mountpoint must not exist before mount")
+		}
+	}
+
 	m := mainConfig{mountPoint: mountPoint,
 		sdafsconf:  &conf,
 		foreground: foreground,
@@ -229,28 +244,11 @@ func repointLog(m mainConfig) {
 	slog.SetDefault(logger)
 }
 
-// detachIfNeeded daemonizes if needed
-func detachIfNeeded(c mainConfig) {
-	if !c.foreground {
-		context := new(daemon.Context)
-		child, err := context.Reborn()
-
-		if err != nil {
-			log.Fatalf("Failed to detach")
-		}
-
-		if child != nil {
-			os.Exit(0)
-		}
-
-		if err := context.Release(); err != nil {
-			slog.Info("Unable to release pid file",
-				"error", err.Error())
-		}
-	}
-}
-
 func checkMountDir(m mainConfig) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+
 	st, err := os.Stat(m.mountPoint)
 
 	if err != nil {
@@ -266,19 +264,6 @@ func checkMountDir(m mainConfig) {
 func main() {
 	c := getConfigs()
 
-	mountConfig := &fuse.MountConfig{
-		ReadOnly:                  true,
-		FuseImpl:                  fuse.FUSEImplMacFUSE,
-		DisableDefaultPermissions: true,
-		FSName:                    fmt.Sprintf("SDA_%s", c.sdafsconf.RootURL),
-		VolumeName:                fmt.Sprintf("SDA mount of %s", c.sdafsconf.RootURL),
-	}
-
-	if c.open {
-		mountConfig.Options = make(map[string]string)
-		mountConfig.Options["allow_other"] = ""
-	}
-
 	checkMountDir(c)
 
 	fs, err := sdafs.NewSDAfs(c.sdafsconf)
@@ -289,17 +274,11 @@ func main() {
 	repointLog(c)
 	detachIfNeeded(c)
 
-	var mount cgofuseadapter.MountedFS
-	if !c.cgofuse {
-		mount, err = fuse.Mount(c.mountPoint, fs.GetFileSystemServer(), mountConfig)
-	} else {
-		mount, err = cgofuseadapter.Mount(c.mountPoint, fs)
-	}
+	mount, err := doMount(c, fs)
 
 	if err != nil {
 		log.Fatalf("Mount of sda at %s failed: %v", c.sdafsconf.RootURL, err)
 	}
-	slog.Info("SDA mount ready", "rootURL", c.sdafsconf.RootURL, "mountpoint", c.mountPoint)
 
 	afterMount(c, mount)
 	slog.Info("SDA unmounted", "mountpoint", c.mountPoint)
@@ -326,7 +305,7 @@ func handleSignals(c chan os.Signal, m string) {
 
 		slog.Debug("Received signal exiting", "signal", s)
 		// TODO: Retry on failure?
-		err := fuse.Unmount(m)
+		err := doUnmount(m)
 		if err != nil {
 			slog.Error("Unmounting failed", "err", err)
 			os.Exit(1)

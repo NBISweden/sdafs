@@ -3,78 +3,64 @@ package cgofuseadapter
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
+	"os"
 	"strings"
+	"syscall"
 	"time"
 
-	ops "github.com/jacobsa/fuse/fuseops"
-	"github.com/jacobsa/fuse/fuseutil"
-
 	"github.com/NBISweden/sdafs/internal/sdafs"
-	"github.com/winfsp/cgofuse/fuse"
 )
 
+// MountedFS is the interface to abstract a filesystem once mounted
 type MountedFS interface {
 	Join(context.Context) error
 }
 
+// Adapter is the struct that keeps all information for this adapter
 type Adapter struct {
-	fs         *sdafs.SDAfs
+	fs         sda
 	mountpoint string
-	fuse.FileSystemBase
+	host       *hostType
+
+	filesystembase
 }
 
-func Mount(mp string, fs *sdafs.SDAfs) (*Adapter, error) {
-	a := &Adapter{fs: fs, mountpoint: mp}
-
-	host := fuse.NewFileSystemHost(a)
-	host.Mount(mp, nil)
-	return a, nil
+type sda interface {
+	OpenDir(_ context.Context, op *sdafs.OpenDirOp) error
+	ReadDir(_ context.Context, op *sdafs.ReadDirOp) error
+	OpenFile(_ context.Context, op *sdafs.OpenFileOp) error
+	ReadFile(_ context.Context, op *sdafs.ReadFileOp) error
+	GetInodeAttributes(_ context.Context, op *sdafs.GetInodeAttributesOp) error
+	LookUpInode(_ context.Context, op *sdafs.LookUpInodeOp) error
+	ReleaseFileHandle(_ context.Context, op *sdafs.ReleaseFileHandleOp) error
 }
 
 func (a *Adapter) Join(context.Context) error {
-	time.Sleep(1 * time.Second)
+	// cgofuse mount call will not return until the filesystem is unmounted
+	// so nothing to do here
 
 	return nil
 }
 
-func attribToStat(a *ops.InodeAttributes, st *fuse.Stat_t) {
-	st.Size = int64(a.Size)
-	st.Uid = a.Uid
-	st.Gid = a.Gid
-	st.Atim = fuse.NewTimespec(a.Atime)
-	st.Ctim = fuse.NewTimespec(a.Ctime)
-	st.Mtim = fuse.NewTimespec(a.Mtime)
-	st.Nlink = a.Nlink
-	st.Rdev = uint64(a.Rdev)
-
-	st.Mode = uint32(a.Mode) & 0777
-	if a.Mode&fs.ModeDir > 0 {
-		st.Mode |= fuse.S_IFDIR
-	} else {
-		st.Mode |= fuse.S_IFREG
-	}
-
-}
-
 // Getattr adapts Getattr between cgofuse and ja fuse APIs
-func (a *Adapter) Getattr(path string, st *fuse.Stat_t, handle uint64) int {
+func (a *Adapter) Getattr(path string, st *Stat_t, handle uint64) int {
 	inode, err := a.filenameToInode(path)
 
 	if err != nil {
 		slog.Info("error in getattr filename lookup", "err", err, "path", path)
-		return -fuse.ENOENT
+		return -mapError(err)
 	}
 
-	op := &ops.GetInodeAttributesOp{
+	op := &sdafs.GetInodeAttributesOp{
 		Inode: inode,
 	}
 	err = a.fs.GetInodeAttributes(context.Background(), op)
 	if err != nil {
 		slog.Info("error from Getattr call", "err", err, "path", path)
-		return -fuse.ENOENT
+		return -mapError(err)
 	}
 
 	attribToStat(&op.Attributes, st)
@@ -84,34 +70,31 @@ func (a *Adapter) Getattr(path string, st *fuse.Stat_t, handle uint64) int {
 }
 
 // Statfs adapts Statfs between cgofuse and ja fuse APIs
-func (a *Adapter) Statfs(path string, st *fuse.Statfs_t) int {
+func (a *Adapter) Statfs(path string, st *Statfs_t) int {
 	// We shortcut here for now and don't call our statfs since
 	// it's so stubby anyway
-
+	// slog.Info("Statfs is called", "path", path)
 	st.Bsize = 65536
-
-	slog.Info("statfs done", "path", path, "st", st)
 
 	return 0
 }
 
 // Opendir adapts Opendir between cgofuse and ja fuse APIs
 func (a *Adapter) Opendir(path string) (int, uint64) {
-
 	inode, err := a.filenameToInode(path)
 
 	if err != nil {
 		slog.Info("error in opendir filename lookup", "err", err, "path", path)
-		return -fuse.ENOENT, 0
+		return -mapError(err), 0
 	}
 
-	op := &ops.OpenDirOp{
+	op := &sdafs.OpenDirOp{
 		Inode: inode,
 	}
 	err = a.fs.OpenDir(context.Background(), op)
 	if err != nil {
 		slog.Info("error from OpenDir call", "err", err, "path", path)
-		return -fuse.ENOENT, 0
+		return -mapError(err), 0
 	}
 
 	return 0, uint64(op.Handle)
@@ -119,7 +102,7 @@ func (a *Adapter) Opendir(path string) (int, uint64) {
 
 // Readdir adapts Readdir between cgofuse and ja fuse APIs
 func (a *Adapter) Readdir(path string,
-	fill func(name string, stat *fuse.Stat_t, ofst int64) bool,
+	fill func(name string, stat *Stat_t, ofst int64) bool,
 	offset int64,
 	handle uint64) int {
 
@@ -127,46 +110,68 @@ func (a *Adapter) Readdir(path string,
 
 	if err != nil {
 		slog.Info("error in readdir filename lookup", "err", err, "path", path)
-		return -fuse.ENOENT
+		return -mapError(err)
 	}
 
-	op := &ops.ReadDirOp{
+	op := &sdafs.ReadDirOp{
 		Inode:  inode,
-		Handle: ops.HandleID(handle),
-		Offset: ops.DirOffset(offset),
-		Dst:    make([]byte, 65536),
+		Handle: sdafs.HandleID(handle),
+		Offset: sdafs.DirOffset(offset),
+		Dst:    make([]byte, 16384),
 	}
 
-	err = a.fs.ReadDir(context.Background(), op)
-	if err != nil {
-		slog.Info("error from readdir op", "err", err, "path", path)
-		return -fuse.ENOENT
+	// FIXME: Better way of managing this?
+	// Handle EAGAIN for dataset loading here
+	// otherwise Windows Explorer easily gets
+	// sad and throws up scary dialogs
+
+	err = syscall.EAGAIN
+	for errors.Is(err, syscall.EAGAIN) {
+		err = a.fs.ReadDir(context.Background(), op)
+
+		if err != nil && !errors.Is(err, syscall.EAGAIN) {
+			slog.Info("error from readdir op", "err", err, "path", path)
+			return -mapError(err)
+		}
+
+		if err != nil {
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	if op.BytesRead > 0 && op.BytesRead < 24 {
+		// Invalid directory entry, doesn't hold the base structure
+		return -mapError(syscall.EIO) // FIXME: Error type?
 	}
 
 	direntsData := op.Dst[:op.BytesRead]
 
+	// Real call done, now walk through results and call the fill function
+	// for each entry
 	for len(direntsData) > 0 && err == nil {
 		de, newDirentsData, err := getDirent(direntsData)
 
 		if err != nil {
 			slog.Info("error from readdir result parsing",
 				"err", err, "path", path)
-			return -fuse.ENOENT
+			return -mapError(err)
 		}
 
-		statOp := &ops.GetInodeAttributesOp{
+		// Since this interface expects a Stat_t, we get one (since this
+		// is all preloaded, it's expected to be cheap)
+		statOp := &sdafs.GetInodeAttributesOp{
 			Inode: de.Inode,
 		}
 		err = a.fs.GetInodeAttributes(context.Background(), statOp)
 		if err != nil {
 			slog.Info("error from stat for readdir result parsing",
 				"err", err, "path", path)
-			return -fuse.ENOENT
+			return -mapError(err)
 		}
 
-		st := &fuse.Stat_t{}
-		st.Ino = uint64(de.Inode)
-
+		st := &Stat_t{
+			Ino: uint64(de.Inode),
+		}
 		attribToStat(&statOp.Attributes, st)
 
 		fill(de.Name, st, int64(de.Offset))
@@ -176,17 +181,18 @@ func (a *Adapter) Readdir(path string,
 	return 0
 }
 
-func (a *Adapter) filenameToInode(path string) (ops.InodeID, error) {
+func (a *Adapter) filenameToInode(path string) (sdafs.InodeID, error) {
+
+	inode := sdafs.InodeID(sdafs.RootInodeID)
 
 	if path == "/" {
-		return ops.InodeID(ops.RootInodeID), nil
+		return inode, nil
 	}
 
 	pathParts := strings.Split(strings.TrimSpace(path), "/")
 
-	inode := ops.InodeID(ops.RootInodeID)
 	for _, name := range pathParts[1:] {
-		op := ops.LookUpInodeOp{
+		op := sdafs.LookUpInodeOp{
 			Parent: inode,
 			Name:   name,
 		}
@@ -198,21 +204,39 @@ func (a *Adapter) filenameToInode(path string) (ops.InodeID, error) {
 				err)
 		}
 
-		inode = op.Entry.Child
+		inode = sdafs.InodeID(op.Entry.Child)
 	}
 
 	return inode, nil
 }
 
-type ja_fuse_dirent struct {
+type dirent_binary_format struct {
 	ino     uint64
 	off     uint64
 	namelen uint32
 	type_   uint32
 }
 
-func getDirent(in []byte) (*fuseutil.Dirent, []byte, error) {
-	dirent := &ja_fuse_dirent{}
+func mapError(e error) int {
+
+	for _, t := range []syscall.Errno{
+		syscall.EACCES,
+		syscall.EINVAL,
+		syscall.EEXIST,
+		syscall.EIO,
+		syscall.EAGAIN} {
+		if errors.Is(e, t) {
+			slog.Info("returning error", "in", e, "out", int(t))
+			return int(t)
+		}
+	}
+	slog.Info("returning error", "in", e, "out", int(syscall.ENOENT))
+
+	return int(syscall.ENOENT)
+}
+
+func getDirent(in []byte) (*sdafs.Dirent, []byte, error) {
+	dirent := &dirent_binary_format{}
 
 	// Decoding the entire struct at once doesn't seem to work for whatever
 	// reason
@@ -239,89 +263,110 @@ func getDirent(in []byte) (*fuseutil.Dirent, []byte, error) {
 
 	name := in[24 : 24+int(dirent.namelen)]
 
-	rDirent := &fuseutil.Dirent{
+	rDirent := &sdafs.Dirent{
 		Name:   string(name),
-		Offset: ops.DirOffset(dirent.off),
-		Inode:  ops.InodeID(dirent.ino),
+		Offset: sdafs.DirOffset(dirent.off),
+		Inode:  sdafs.InodeID(dirent.ino),
 	}
 
 	pad := (8 - int(dirent.namelen%8)) % 8
 	return rDirent, in[24+pad+int(dirent.namelen):], nil
 }
 
+// Access adapts Access between cgofuse and jacobsa fuse APIs
+// for cgofuse we only support wide open so access is always accepted
 func (a *Adapter) Access(path string, mask uint32) int {
-	slog.Info("access", "path", path)
+	// W_OK is 2
+	if mask&2 > 0 {
+		return -mapError(syscall.EINVAL)
+	}
 
 	_, err := a.filenameToInode(path)
 
 	if err != nil {
 		slog.Info("error in access filename lookup", "err", err, "path", path)
-		return -fuse.ENOENT
+		return -mapError(err)
 	}
 
+	// TODO: Maybe do execute check here?
 	return 0
 }
 
-// func (a *Adapter) Create(path string, flags int, mode uint32) (int, uint64) {
-// 	slog.Info("create", "path", path)
-// 	return -fuse.EACCES, ^uint64(0)
-// }
-
+// Release adapts Close between cgofuse and jacobsa fuse APIs
 func (a *Adapter) Release(path string, fh uint64) int {
 	_, err := a.filenameToInode(path)
 
 	if err != nil {
 		slog.Info("error in Release filename lookup", "err", err, "path", path)
-		return -fuse.ENOENT
+		return -mapError(err)
+	}
+
+	err = a.fs.ReleaseFileHandle(context.Background(),
+		&sdafs.ReleaseFileHandleOp{
+			Handle: sdafs.HandleID(fh),
+		})
+
+	if err != nil {
+		return -mapError(err)
 	}
 
 	return 0
 }
 
+// ReleaseDir adapts Closedir between cgofuse and jacobsa fuse APIs
 func (a *Adapter) ReleaseDir(path string, fh uint64) int {
 	_, err := a.filenameToInode(path)
 
 	if err != nil {
 		slog.Info("error in ReleaseDir filename lookup", "err", err, "path", path)
-		return -fuse.ENOENT
+		return -mapError(err)
 	}
 	return 0
 }
 
-// Opendir adapts Opendir between cgofuse and ja fuse APIs
+// Open adapts Open for file between cgofuse and jacobsa fuse APIs
 func (a *Adapter) Open(path string, flags int) (int, uint64) {
+
+	for _, flag := range []int{os.O_WRONLY, os.O_RDWR, os.O_CREATE, os.O_TRUNC, os.O_EXCL, os.O_APPEND} {
+		if flags&flag > 0 {
+			return -mapError(syscall.EINVAL), 0
+		}
+	}
 
 	inode, err := a.filenameToInode(path)
 
 	if err != nil {
 		slog.Info("error in Open filename lookup", "err", err, "path", path)
-		return -fuse.ENOENT, 0
+		return -mapError(err), 0
 	}
 
-	op := &ops.OpenFileOp{
+	op := &sdafs.OpenFileOp{
 		Inode: inode,
 	}
 	err = a.fs.OpenFile(context.Background(), op)
 	if err != nil {
 		slog.Info("error from OpenFile call", "err", err, "path", path)
-		return -fuse.ENOENT, 0
+		return -mapError(err), 0
 	}
 
 	return 0, uint64(op.Handle)
 }
 
-func (a *Adapter) Read(path string, buf []byte, offset int64, handle uint64) int {
-
+// Read adapts Read for file between cgofuse and jacobsa fuse APIs
+func (a *Adapter) Read(path string,
+	buf []byte,
+	offset int64,
+	handle uint64) int {
 	inode, err := a.filenameToInode(path)
 
 	if err != nil {
 		slog.Info("error in Read filename lookup", "err", err, "path", path)
-		return -fuse.ENOENT
+		return -mapError(err)
 	}
 
-	op := &ops.ReadFileOp{
+	op := &sdafs.ReadFileOp{
 		Inode:  inode,
-		Handle: ops.HandleID(handle),
+		Handle: sdafs.HandleID(handle),
 		Offset: offset,
 		Size:   int64(len(buf)),
 		Dst:    buf,
@@ -329,9 +374,8 @@ func (a *Adapter) Read(path string, buf []byte, offset int64, handle uint64) int
 	err = a.fs.ReadFile(context.Background(), op)
 	if err != nil {
 		slog.Info("error from ReadFile call", "err", err, "path", path)
-		return -fuse.ENOENT
+		return -mapError(err)
 	}
 
 	return op.BytesRead
-
 }
