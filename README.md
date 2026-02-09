@@ -6,6 +6,14 @@ off-platform.
 
 ## About
 
+### Windows
+
+This filesystem is supported for use under Windows, but has some caveats:
+
+* use of [winsfp](https://winfsp.dev/) is required, it needs to be installed for
+  sdafs to work
+* sdafs doesn't currently have built-in detaching on Windows
+
 ### FUSE driver
 
 This should work as user (without additional privileges) installation on any
