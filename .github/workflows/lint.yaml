@@ -23,6 +23,9 @@ jobs:
       statuses: write
 
     steps:
+      - name: Get fuse bindings
+        run: apt update && apt install --yes libfuse-dev
+
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
