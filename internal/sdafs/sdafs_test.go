@@ -139,24 +139,6 @@ func TestNewSDAfs(t *testing.T) {
 	assert.Nil(t, err, "Unexpected error")
 }
 
-func getBaseSDA(t *testing.T) *SDAfs {
-	c := Conf{}
-
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-
-	c.CredentialsFile = "test.ini"
-	c.RootURL = "https://my.sda.local"
-	c.HTTPClient = http.DefaultClient
-
-	httpmock.RegisterResponder("GET", "https://my.sda.local/metadata/datasets",
-		httpmock.NewStringResponder(200, `["dataset1", "dataset2"]`))
-	sda, err := NewSDAfs(&c)
-
-	assert.Nil(t, err, "Unexpected error when creating SDAfs")
-	return sda
-}
-
 func TestDatasetLoad(t *testing.T) {
 
 	httpmock.Activate()
