@@ -16,8 +16,6 @@ func CGOFuseAvailable() bool {
 	return true
 }
 
-// const ENOENT = fuse.ENOENT
-
 type Stat_t = fuse.Stat_t
 type Statfs_t = fuse.Statfs_t
 

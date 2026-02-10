@@ -17,8 +17,6 @@ func CGOFuseAvailable() bool {
 	return false
 }
 
-const ENOENT = 0
-
 type Stat_t struct {
 	Ino uint64
 }
