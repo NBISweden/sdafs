@@ -244,7 +244,9 @@ func TestHTTPReaderPrefetches(t *testing.T) {
 	// Clear cache
 	cache.Clear()
 
+	prefetchLock.Lock()
 	prefetches[url] = []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+	prefetchLock.Unlock()
 	s.prefetchAt(0*time.Second, 0)
 
 	s.removeFromOutstanding(9)
@@ -253,8 +255,12 @@ func TestHTTPReaderPrefetches(t *testing.T) {
 	assert.Equal(t, prefetches[url], []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8}, "unexpected outstanding prefetches after remove")
 	s.removeFromOutstanding(5)
 	// We don't care about the internal order, sort for simplicity
+	prefetchLock.Lock()
+	defer prefetchLock.Unlock()
+
 	slices.Sort(prefetches[url])
 	assert.Equal(t, prefetches[url], []uint64{0, 1, 2, 3, 4, 6, 7, 8}, "unexpected outstanding prefetches after remove")
+
 }
 
 func TestHTTPReaderFailures(t *testing.T) {
