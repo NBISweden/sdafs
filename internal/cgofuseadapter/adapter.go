@@ -126,7 +126,8 @@ func (a *Adapter) Readdir(path string,
 	// sad and throws up scary dialogs
 
 	err = syscall.EAGAIN
-	for errors.Is(err, syscall.EAGAIN) {
+	failCount := 0
+	for errors.Is(err, syscall.EAGAIN) && failCount < 12000 {
 		err = a.fs.ReadDir(context.Background(), op)
 
 		if err != nil && !errors.Is(err, syscall.EAGAIN) {
@@ -137,6 +138,7 @@ func (a *Adapter) Readdir(path string,
 		if err != nil {
 			time.Sleep(5 * time.Millisecond)
 		}
+		failCount += 1
 	}
 
 	if op.BytesRead > 0 && op.BytesRead < 24 {
@@ -226,13 +228,13 @@ func mapError(e error) int {
 		syscall.EIO,
 		syscall.EAGAIN} {
 		if errors.Is(e, t) {
-			slog.Info("returning error", "in", e, "out", int(t))
+			slog.Debug("returning error", "in", e, "out", int(t))
 			return int(t)
 		}
 	}
 	slog.Info("returning error", "in", e, "out", int(syscall.ENOENT))
 
-	return int(syscall.ENOENT)
+	return int(syscall.EIO)
 }
 
 func getDirent(in []byte) (*sdafs.Dirent, []byte, error) {
