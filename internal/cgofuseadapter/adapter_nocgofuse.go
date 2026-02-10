@@ -1,4 +1,4 @@
-//go:build darwin || (linux && arm64)
+//go:build !cgo || darwin || (linux && arm64)
 
 // This file is just to enable building, cgofuse is not actually available
 // with darwin for now
