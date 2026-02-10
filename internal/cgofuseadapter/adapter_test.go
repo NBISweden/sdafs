@@ -143,12 +143,18 @@ func TestReaddir(t *testing.T) {
 		o.BytesRead = 48
 		writeOut := uint64(10)
 		// inode
-		binary.Encode(o.Dst[0:8], binary.NativeEndian, &writeOut)
-		writeOut = uint64(0)
+		written, err := binary.Encode(o.Dst[0:8], binary.NativeEndian, &writeOut)
+		assert.Nil(t, err, "Encode failed")
+		assert.Equal(t, 8, written, "Unexpected number of bytes written")
 		// offset
-		binary.Encode(o.Dst[8:16], binary.NativeEndian, &writeOut)
+		writeOut = uint64(0)
+		written, err = binary.Encode(o.Dst[8:16], binary.NativeEndian, &writeOut)
+		assert.Nil(t, err, "Encode failed")
+		assert.Equal(t, 8, written, "Unexpected number of bytes written")
 		length := uint32(20)
-		binary.Encode(o.Dst[16:20], binary.NativeEndian, &length)
+		written, err = binary.Encode(o.Dst[16:20], binary.NativeEndian, &length)
+		assert.Nil(t, err, "Encode failed")
+		assert.Equal(t, 4, written, "Unexpected number of bytes written")
 		copy(o.Dst[24:], "this_name_is_20_long")
 	}
 	mock.readDirAction = &oneDirent
