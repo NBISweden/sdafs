@@ -337,9 +337,9 @@ func TestFilenameToInode(t *testing.T) {
 	assert.Equal(t, sdafs.InodeID(40), inode, "Unexpected inode for root")
 	assert.Nil(t, err, "Unexpected error for filenameToInode")
 
-	inode, err = a.filenameToInode("/test/path/notfound")
+	_, err = a.filenameToInode("/test/path/notfound")
 	assert.NotNil(t, err, "Unexpected lack of error for filenameToInode")
 
-	inode, err = a.filenameToInode("/notfound/path/steps")
+	_, err = a.filenameToInode("/notfound/path/steps")
 	assert.NotNil(t, err, "Unexpected lack of error for filenameToInode")
 }
