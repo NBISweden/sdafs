@@ -1,4 +1,4 @@
-//go:build !darwin && !(linux && arm64)
+//go:build cgo && !darwin && !(linux && arm64)
 
 package cgofuseadapter
 
