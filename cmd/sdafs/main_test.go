@@ -231,7 +231,6 @@ func TestConfOptions(t *testing.T) {
 		"Didn't pick up cachettl as expected")
 
 	os.Args = safeArgs
-
 }
 
 func TestRepoint(t *testing.T) {
@@ -266,7 +265,6 @@ func runExiting(t *testing.T, testName string) {
 		" %v, want exit status 1",
 		testName,
 		err)
-
 }
 
 func TestRepointFail(t *testing.T) {
