@@ -1152,15 +1152,16 @@ func (s *SDAfs) ReleaseFileHandle(
 	op *ReleaseFileHandleOp) error {
 
 	s.maplock.Lock()
-	defer s.maplock.Unlock()
 
 	r, exist := s.handles[op.Handle]
 	if !exist {
+		s.maplock.Unlock()
 		// Bad file handle
 		return EINVAL
 	}
 
 	delete(s.handles, op.Handle)
+	s.maplock.Unlock()
 
 	if r != nil {
 		err := r.Close()

@@ -87,8 +87,6 @@ func writeDirent(out []byte, d Dirent) int {
 
 	copy(out[24:], d.Name)
 
-	pad := (8 - len(d.Name)%8) % 8
-
 	return 24 + pad + len(d.Name)
 
 }
