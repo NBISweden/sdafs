@@ -58,7 +58,7 @@ type SDAfs struct {
 	datasets []string
 
 	// loading keeps track of datasets *currently* being fetched
-	loading []string
+	loading map[string]bool
 
 	// publicC4GHkey is the key we to present for reencryption
 	publicC4GHkey string
@@ -267,6 +267,9 @@ func (s *SDAfs) initMaps() {
 		s.handles = make(map[HandleID]io.ReadSeekCloser)
 	}
 
+	if s.loading == nil {
+		s.loading = make(map[string]bool)
+	}
 }
 
 // readToken extracts the token from the credentials file
@@ -990,19 +993,25 @@ func (s *SDAfs) checkLoaded(i *inode) error {
 
 	s.maplock.Lock()
 
+	_, exists := s.loading[i.dataset]
 	// Check if we're already loading this and fail if we're doing that.
-	if slices.Contains(s.loading, i.dataset) {
+	if exists {
 		s.maplock.Unlock()
 		return fmt.Errorf("already in the process of loading %s %w", i.dataset,
 			EAGAIN)
 	}
 
-	s.loading = append(s.loading, i.dataset)
+	s.loading[i.dataset] = true
 	s.maplock.Unlock()
 
 	slog.Info("Loading dataset", "dataset", i.dataset)
 
 	err := s.loadDataset(i.dataset)
+
+	s.maplock.Lock()
+	delete(s.loading, i.dataset)
+	s.maplock.Unlock()
+
 	if err != nil {
 		slog.Error("Couldn't load dataset",
 			"dataset", i.dataset,
@@ -1010,10 +1019,6 @@ func (s *SDAfs) checkLoaded(i *inode) error {
 		return fmt.Errorf("couldn't load dataset %s: %v", i.dataset, err)
 	}
 	i.loaded = true
-	s.maplock.Lock()
-	index := slices.Index(s.loading, i.dataset)
-	s.loading = slices.Delete(s.loading, index, index+1)
-	s.maplock.Unlock()
 	return nil
 }
 
