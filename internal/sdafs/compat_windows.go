@@ -1,3 +1,5 @@
+//go:build windows
+
 package sdafs
 
 // Compatibility layer to allow for builds for Windows by excluding jacobsa
@@ -57,9 +59,10 @@ type notImplemented struct {
 // writeDirent adds the directory entry d to the buffer and
 // returns the used length. 8-byte alignment
 func writeDirent(out []byte, d Dirent) int {
+	pad := (8 - len(d.Name)%8) % 8
 
-	if len(out) < 32+len(d.Name) {
-		slog.Info("bailing as out is to short", "out", len(out), "needed", 32+len(d.Name))
+	if len(out) < 24+len(d.Name)+pad {
+		slog.Info("bailing as out is too short", "out", len(out), "needed", 24+len(d.Name)+pad)
 		return 0
 	}
 

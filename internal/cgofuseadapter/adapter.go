@@ -200,7 +200,7 @@ func (a *Adapter) filenameToInode(path string) (sdafs.InodeID, error) {
 		err := a.fs.LookUpInode(context.Background(), &op)
 		if err != nil {
 			return inode, fmt.Errorf(
-				"error from LookUpInode when looking for %s: %v", name,
+				"error from LookUpInode when looking for %s: %w", name,
 				err)
 		}
 
@@ -236,6 +236,10 @@ func mapError(e error) int {
 }
 
 func getDirent(in []byte) (*sdafs.Dirent, []byte, error) {
+	if len(in) < 24 {
+		return nil, in, fmt.Errorf("input too small")
+	}
+
 	dirent := &dirent_binary_format{}
 
 	// Decoding the entire struct at once doesn't seem to work for whatever
@@ -259,6 +263,10 @@ func getDirent(in []byte) (*sdafs.Dirent, []byte, error) {
 	_, err = binary.Decode(in[20:24], binary.NativeEndian, &dirent.type_)
 	if err != nil {
 		return nil, in, fmt.Errorf("couldn't parse direntry type: %v", err)
+	}
+
+	if len(in) < 24+int(dirent.namelen) {
+		return nil, in, fmt.Errorf("input too small")
 	}
 
 	name := in[24 : 24+int(dirent.namelen)]

@@ -343,3 +343,8 @@ func TestFilenameToInode(t *testing.T) {
 	_, err = a.filenameToInode("/notfound/path/steps")
 	assert.NotNil(t, err, "Unexpected lack of error for filenameToInode")
 }
+
+func TestGetDirent(t *testing.T) {
+	_, _, err := getDirent([]byte("fail"))
+	assert.NotNil(t, err, "Short input should fail getDirent")
+}

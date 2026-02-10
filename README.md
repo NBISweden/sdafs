@@ -10,7 +10,7 @@ off-platform.
 
 This filesystem is supported for use under Windows, but has some caveats:
 
-- use of [winsfp](https://winfsp.dev/) is required, it needs to be installed for
+- use of [winfsp](https://winfsp.dev/) is required, it needs to be installed for
   sdafs to work
 - sdafs doesn't currently have built-in detaching on Windows
 

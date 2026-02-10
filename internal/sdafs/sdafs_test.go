@@ -301,11 +301,11 @@ func TestReleaseFileHandle(t *testing.T) {
 	s := &SDAfs{}
 	s.handles = make(map[HandleID]io.ReadSeekCloser, 0)
 	err := s.ReleaseFileHandle(context.TODO(), &ReleaseFileHandleOp{})
-	assert.NotNil(t, err, "Relasing an unallocated handle should fail")
+	assert.NotNil(t, err, "Releasing an unallocated handle should fail")
 
 	s.handles[100] = testReadSeekCloser{}
 	err = s.ReleaseFileHandle(context.TODO(), &ReleaseFileHandleOp{Handle: 100})
-	assert.Nil(t, err, "Relasing an allocated handle should work")
+	assert.Nil(t, err, "Releasing an allocated handle should work")
 }
 
 func TestNewIdLocked(t *testing.T) {
