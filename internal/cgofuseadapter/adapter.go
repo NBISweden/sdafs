@@ -141,6 +141,11 @@ func (a *Adapter) Readdir(path string,
 		failCount += 1
 	}
 
+	if err != nil {
+		slog.Info("error from readdir op", "err", err, "path", path)
+		return -mapError(err)
+	}
+
 	if op.BytesRead > 0 && op.BytesRead < 24 {
 		// Invalid directory entry, doesn't hold the base structure
 		return -mapError(syscall.EIO) // FIXME: Error type?
