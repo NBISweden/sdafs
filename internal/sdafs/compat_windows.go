@@ -62,7 +62,7 @@ func writeDirent(out []byte, d Dirent) int {
 	pad := (8 - len(d.Name)%8) % 8
 
 	if len(out) < 24+len(d.Name)+pad {
-		slog.Info("bailing as out is too short", "out", len(out), "needed", 24+len(d.Name)+pad)
+		slog.Debug("bailing as out is too short", "out", len(out), "needed", 24+len(d.Name)+pad)
 		return 0
 	}
 
@@ -82,6 +82,13 @@ func writeDirent(out []byte, d Dirent) int {
 	_, err = binary.Encode(out[16:20], binary.NativeEndian, &nameLength)
 	if err != nil {
 		slog.Error("couldn't store direntry name length", "err", err)
+		return 0
+	}
+
+	var zero uint32
+	_, err = binary.Encode(out[20:24], binary.NativeEndian, &zero)
+	if err != nil {
+		slog.Error("couldn't zero direntry type", "err", err)
 		return 0
 	}
 
