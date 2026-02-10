@@ -6,6 +6,7 @@
 package cgofuseadapter
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/NBISweden/sdafs/internal/sdafs"
@@ -31,7 +32,7 @@ type filesystembase struct {
 
 func Mount(mp string, fs *sdafs.SDAfs, options string) (*Adapter, error) {
 	slog.Info("this should never happen")
-	return nil, nil
+	return nil, fmt.Errorf("nocgofuse mode, Mount not implemented")
 }
 
 func attribToStat(a *sdafs.InodeAttributes, st *Stat_t) {

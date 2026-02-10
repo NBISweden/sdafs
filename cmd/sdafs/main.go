@@ -63,6 +63,7 @@ func getConfigs() mainConfig {
 	var owner uint
 	var group uint
 	var cgofuse bool
+	var cgofuseOptions string
 
 	home := os.Getenv("HOME")
 
@@ -99,6 +100,7 @@ func getConfigs() mainConfig {
 	// cgofuse mandatory on Windows, may be an option for some platforms
 	if runtime.GOOS != "windows" && cgofuseadapter.CGOFuseAvailable() {
 		flag.BoolVar(&cgofuse, "usecgofuse", false, "Use alternate fuse layer for wider availability (implies open)")
+		flag.StringVar(&cgofuseOptions, "cgofuseoptions", "", "Options passed to cgofuse mount")
 	} else {
 		cgofuse = false
 	}
@@ -106,6 +108,7 @@ func getConfigs() mainConfig {
 	if runtime.GOOS == "windows" {
 		open = true
 		cgofuse = true
+		flag.StringVar(&cgofuseOptions, "cgofuseoptions", "", "Options passed to cgofuse mount")
 	} else {
 		flag.BoolVar(&open, "open", false, "Set permissions allowing access by others than the user")
 	}
@@ -217,12 +220,13 @@ func getConfigs() mainConfig {
 	}
 
 	m := mainConfig{mountPoint: mountPoint,
-		sdafsconf:  &conf,
-		foreground: foreground,
-		logFile:    useLogFile,
-		open:       open,
-		logLevel:   slog.Level(logLevel),
-		cgofuse:    cgofuse,
+		sdafsconf:      &conf,
+		foreground:     foreground,
+		logFile:        useLogFile,
+		open:           open,
+		logLevel:       slog.Level(logLevel),
+		cgofuse:        cgofuse,
+		cgofuseOptions: cgofuseOptions,
 	}
 
 	return m
