@@ -181,7 +181,10 @@ func (a *Adapter) Readdir(path string,
 		}
 		attribToStat(&statOp.Attributes, st)
 
-		fill(de.Name, st, int64(de.Offset))
+		ok := fill(de.Name, st, int64(de.Offset))
+		if !ok {
+			return 0
+		}
 		direntsData = newDirentsData
 	}
 
