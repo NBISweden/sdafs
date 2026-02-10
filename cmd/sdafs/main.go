@@ -99,10 +99,15 @@ func getConfigs() mainConfig {
 	// cgofuse mandatory on Windows, may be an option for some platforms
 	if runtime.GOOS != "windows" && cgofuseadapter.CGOFuseAvailable() {
 		flag.BoolVar(&cgofuse, "usecgofuse", false, "Use alternate fuse layer for wider availability (implies open)")
-		flag.BoolVar(&open, "open", false, "Set permissions allowing access by others than the user")
 	} else {
-		cgofuse = true
+		cgofuse = false
+	}
+
+	if runtime.GOOS == "windows" {
 		open = true
+		cgofuse = true
+	} else {
+		flag.BoolVar(&open, "open", false, "Set permissions allowing access by others than the user")
 	}
 
 	flag.Parse()
@@ -189,7 +194,7 @@ func getConfigs() mainConfig {
 		conf.GID = uint32(group)
 	}
 
-	if open {
+	if cgofuse || open {
 		conf.SpecifyDirPerms = true
 		conf.SpecifyFilePerms = true
 

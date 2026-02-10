@@ -18,7 +18,9 @@ func CGOFuseAvailable() bool {
 }
 
 type Stat_t struct {
-	Ino uint64
+	Ino  uint64
+	Uid  uint32
+	Size int64
 }
 type Statfs_t struct {
 	Bsize uint64
