@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -65,9 +66,15 @@ func getConfigs() mainConfig {
 	var cgofuse bool
 	var cgofuseOptions string
 
+	var credentialsDefault string
 	home := os.Getenv("HOME")
 
-	credentialsDefault := fmt.Sprintf("%s/.s3cmd", home)
+	if len(home) > 0 {
+		credentialsDefault = filepath.Join(home, ".s3cfg")
+	} else {
+		credentialsDefault = ".s3cfg"
+	}
+
 	flag.StringVar(&credentialsFile, "credentialsfile", credentialsDefault, "Credentials file")
 	flag.StringVar(&rootURL, "rootURL", "https://download.bp.nbis.se", "Root URL for the SDA download interface")
 	flag.StringVar(&logFile, "log", "", "File to send logs to instead of stderr,"+
