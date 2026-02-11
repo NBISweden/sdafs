@@ -228,7 +228,6 @@ type dirent_binary_format struct {
 }
 
 func mapError(e error) int {
-
 	for _, t := range []syscall.Errno{
 		syscall.EACCES,
 		syscall.EINVAL,
@@ -241,7 +240,7 @@ func mapError(e error) int {
 			return int(t)
 		}
 	}
-	slog.Info("returning error", "in", e, "out", int(syscall.ENOENT))
+	slog.Debug("returning error", "in", e, "out", int(syscall.EIO))
 
 	return int(syscall.EIO)
 }

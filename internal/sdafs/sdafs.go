@@ -986,12 +986,12 @@ func (s *SDAfs) GetInodeAttributes(
 
 // checkLoaded checks if the dataset the inode is the base for is already loaded
 func (s *SDAfs) checkLoaded(i *inode) error {
+	s.maplock.Lock()
 
 	if i.loaded {
+		s.maplock.Unlock()
 		return nil
 	}
-
-	s.maplock.Lock()
 
 	_, exists := s.loading[i.dataset]
 	// Check if we're already loading this and fail if we're doing that.
@@ -1018,7 +1018,10 @@ func (s *SDAfs) checkLoaded(i *inode) error {
 			"error", err)
 		return fmt.Errorf("couldn't load dataset %s: %v", i.dataset, err)
 	}
+	s.maplock.Lock()
 	i.loaded = true
+	s.maplock.Unlock()
+
 	return nil
 }
 
@@ -1093,7 +1096,7 @@ func (s *SDAfs) OpenFile(
 	if !found {
 		slog.Info("OpenFile of non-existent file", "inode", op.Inode)
 
-		return EEXIST
+		return ENOENT
 	}
 
 	if in.dir {
