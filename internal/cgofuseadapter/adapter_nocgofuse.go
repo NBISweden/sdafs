@@ -1,7 +1,7 @@
-//go:build !cgo || darwin || (linux && arm64)
+//go:build !cgo && !windows
 
-// This file is just to enable building, cgofuse is not actually available
-// with darwin for now
+// This file is just to enable building, cgofuse is not available
+// on unix without cgo
 
 package cgofuseadapter
 
