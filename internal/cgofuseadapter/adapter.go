@@ -233,6 +233,7 @@ func mapError(e error) int {
 		syscall.EACCES,
 		syscall.EINVAL,
 		syscall.EEXIST,
+		syscall.EROFS,
 		syscall.EIO,
 		syscall.EAGAIN} {
 		if errors.Is(e, t) {
@@ -296,7 +297,7 @@ func getDirent(in []byte) (*sdafs.Dirent, []byte, error) {
 func (a *Adapter) Access(path string, mask uint32) int {
 	// W_OK is 2
 	if mask&2 > 0 {
-		return -mapError(syscall.EINVAL)
+		return -mapError(syscall.EROFS)
 	}
 
 	_, err := a.filenameToInode(path)
