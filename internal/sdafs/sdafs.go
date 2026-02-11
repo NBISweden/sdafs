@@ -997,7 +997,7 @@ func (s *SDAfs) checkLoaded(i *inode) error {
 	// Check if we're already loading this and fail if we're doing that.
 	if exists {
 		s.maplock.Unlock()
-		return fmt.Errorf("already in the process of loading %s %w", i.dataset,
+		return fmt.Errorf("already in the process of loading %s: %w", i.dataset,
 			EAGAIN)
 	}
 
