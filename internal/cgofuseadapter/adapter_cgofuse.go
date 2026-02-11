@@ -1,4 +1,6 @@
-//go:build cgo && !darwin && !(linux && arm64)
+//go:build (cgo && !darwin && !(linux && arm64)) || windows
+
+// On windows, cgofuse is supported without cgo
 
 package cgofuseadapter
 
