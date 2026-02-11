@@ -308,7 +308,7 @@ func TestReleaseFileHandle(t *testing.T) {
 	assert.Nil(t, err, "Releasing an allocated handle should work")
 }
 
-func TestNewIdLocked(t *testing.T) {
+func TestGetNewIdLocked(t *testing.T) {
 	s := &SDAfs{}
 	s.handles = make(map[HandleID]io.ReadSeekCloser, 0)
 	id, err := s.getNewIDLocked()
