@@ -214,8 +214,14 @@ func getConfigs() mainConfig {
 
 	if runtime.GOOS == "windows" {
 		_, err := os.Stat(mountPoint)
+		if err == nil {
+			log.Fatalf("on Windows, mountpoint must not exist")
+		}
+
 		if !errors.Is(err, fs.ErrNotExist) {
-			log.Fatalf("on Windows, mountpoint must not exist before mount")
+			log.Fatalf("unexpected error when checking mountpoint %s: %v",
+				mountPoint,
+				err)
 		}
 	}
 
