@@ -50,7 +50,7 @@ func (a *Adapter) Getattr(path string, st *Stat_t, handle uint64) int {
 	inode, err := a.filenameToInode(path)
 
 	if err != nil {
-		slog.Info("error in getattr filename lookup", "err", err, "path", path)
+		slog.Debug("error in getattr filename lookup", "err", err, "path", path)
 		return -mapError(err)
 	}
 
@@ -59,7 +59,7 @@ func (a *Adapter) Getattr(path string, st *Stat_t, handle uint64) int {
 	}
 	err = a.fs.GetInodeAttributes(context.Background(), op)
 	if err != nil {
-		slog.Info("error from Getattr call", "err", err, "path", path)
+		slog.Debug("error from Getattr call", "err", err, "path", path)
 		return -mapError(err)
 	}
 
@@ -73,7 +73,7 @@ func (a *Adapter) Getattr(path string, st *Stat_t, handle uint64) int {
 func (a *Adapter) Statfs(path string, st *Statfs_t) int {
 	// We shortcut here for now and don't call our statfs since
 	// it's so stubby anyway
-	// slog.Info("Statfs is called", "path", path)
+
 	st.Bsize = 65536
 
 	return 0
@@ -84,7 +84,7 @@ func (a *Adapter) Opendir(path string) (int, uint64) {
 	inode, err := a.filenameToInode(path)
 
 	if err != nil {
-		slog.Info("error in opendir filename lookup", "err", err, "path", path)
+		slog.Debug("error in opendir filename lookup", "err", err, "path", path)
 		return -mapError(err), 0
 	}
 
@@ -93,7 +93,7 @@ func (a *Adapter) Opendir(path string) (int, uint64) {
 	}
 	err = a.fs.OpenDir(context.Background(), op)
 	if err != nil {
-		slog.Info("error from OpenDir call", "err", err, "path", path)
+		slog.Debug("error from OpenDir call", "err", err, "path", path)
 		return -mapError(err), 0
 	}
 
@@ -109,7 +109,7 @@ func (a *Adapter) Readdir(path string,
 	inode, err := a.filenameToInode(path)
 
 	if err != nil {
-		slog.Info("error in readdir filename lookup", "err", err, "path", path)
+		slog.Debug("error in readdir filename lookup", "err", err, "path", path)
 		return -mapError(err)
 	}
 
@@ -131,7 +131,7 @@ func (a *Adapter) Readdir(path string,
 		err = a.fs.ReadDir(context.Background(), op)
 
 		if err != nil && !errors.Is(err, syscall.EAGAIN) {
-			slog.Info("error from readdir op", "err", err, "path", path)
+			slog.Debug("error from readdir op", "err", err, "path", path)
 			return -mapError(err)
 		}
 
@@ -142,7 +142,7 @@ func (a *Adapter) Readdir(path string,
 	}
 
 	if err != nil {
-		slog.Info("error from readdir op", "err", err, "path", path)
+		slog.Debug("error from readdir op", "err", err, "path", path)
 		return -mapError(err)
 	}
 
@@ -159,7 +159,7 @@ func (a *Adapter) Readdir(path string,
 		de, newDirentsData, err := getDirent(direntsData)
 
 		if err != nil {
-			slog.Info("error from readdir result parsing",
+			slog.Debug("error from readdir result parsing",
 				"err", err, "path", path)
 			return -mapError(err)
 		}
@@ -171,7 +171,7 @@ func (a *Adapter) Readdir(path string,
 		}
 		err = a.fs.GetInodeAttributes(context.Background(), statOp)
 		if err != nil {
-			slog.Info("error from stat for readdir result parsing",
+			slog.Debug("error from stat for readdir result parsing",
 				"err", err, "path", path)
 			return -mapError(err)
 		}
@@ -302,7 +302,7 @@ func (a *Adapter) Access(path string, mask uint32) int {
 	_, err := a.filenameToInode(path)
 
 	if err != nil {
-		slog.Info("error in access filename lookup", "err", err, "path", path)
+		slog.Debug("error in access filename lookup", "err", err, "path", path)
 		return -mapError(err)
 	}
 
@@ -315,7 +315,7 @@ func (a *Adapter) Release(path string, fh uint64) int {
 	_, err := a.filenameToInode(path)
 
 	if err != nil {
-		slog.Info("error in Release filename lookup", "err", err, "path", path)
+		slog.Debug("error in Release filename lookup", "err", err, "path", path)
 		return -mapError(err)
 	}
 
@@ -336,7 +336,7 @@ func (a *Adapter) ReleaseDir(path string, fh uint64) int {
 	_, err := a.filenameToInode(path)
 
 	if err != nil {
-		slog.Info("error in ReleaseDir filename lookup", "err", err, "path", path)
+		slog.Debug("error in ReleaseDir filename lookup", "err", err, "path", path)
 		return -mapError(err)
 	}
 	return 0
@@ -354,7 +354,7 @@ func (a *Adapter) Open(path string, flags int) (int, uint64) {
 	inode, err := a.filenameToInode(path)
 
 	if err != nil {
-		slog.Info("error in Open filename lookup", "err", err, "path", path)
+		slog.Debug("error in Open filename lookup", "err", err, "path", path)
 		return -mapError(err), 0
 	}
 
@@ -363,7 +363,7 @@ func (a *Adapter) Open(path string, flags int) (int, uint64) {
 	}
 	err = a.fs.OpenFile(context.Background(), op)
 	if err != nil {
-		slog.Info("error from OpenFile call", "err", err, "path", path)
+		slog.Debug("error from OpenFile call", "err", err, "path", path)
 		return -mapError(err), 0
 	}
 
@@ -378,7 +378,7 @@ func (a *Adapter) Read(path string,
 	inode, err := a.filenameToInode(path)
 
 	if err != nil {
-		slog.Info("error in Read filename lookup", "err", err, "path", path)
+		slog.Debug("error in Read filename lookup", "err", err, "path", path)
 		return -mapError(err)
 	}
 
@@ -391,7 +391,7 @@ func (a *Adapter) Read(path string,
 	}
 	err = a.fs.ReadFile(context.Background(), op)
 	if err != nil {
-		slog.Info("error from ReadFile call", "err", err, "path", path)
+		slog.Debug("error from ReadFile call", "err", err, "path", path)
 		return -mapError(err)
 	}
 
