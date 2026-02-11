@@ -67,7 +67,7 @@ func getConfigs() mainConfig {
 	var cgofuseOptions string
 
 	var credentialsDefault string
-	home := os.Getenv("HOME")
+	home := os.UserHomeDir()
 
 	if len(home) > 0 {
 		credentialsDefault = filepath.Join(home, ".s3cfg")
@@ -108,7 +108,9 @@ func getConfigs() mainConfig {
 	if runtime.GOOS != "windows" && cgofuseadapter.CGOFuseAvailable() {
 		flag.BoolVar(&cgofuse, "usecgofuse", false, "Use alternate fuse layer for wider availability (implies open)")
 		flag.StringVar(&cgofuseOptions, "cgofuseoptions", "", "Options passed to cgofuse mount")
-	} else {
+	}
+
+	if runtime != "windows" && !cgofuseadapter.CGOFuseAvailable() {
 		cgofuse = false
 	}
 
@@ -117,6 +119,7 @@ func getConfigs() mainConfig {
 		cgofuse = true
 		flag.StringVar(&cgofuseOptions, "cgofuseoptions", "", "Options passed to cgofuse mount")
 	} else {
+		// Platforms other than Windows doesn't have open mandatory
 		flag.BoolVar(&open, "open", false, "Set permissions allowing access by others than the user")
 	}
 
