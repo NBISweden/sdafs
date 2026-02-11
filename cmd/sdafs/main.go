@@ -67,12 +67,12 @@ func getConfigs() mainConfig {
 	var cgofuseOptions string
 
 	var credentialsDefault string
-	home := os.UserHomeDir()
+	home, err := os.UserHomeDir()
 
-	if len(home) > 0 {
-		credentialsDefault = filepath.Join(home, ".s3cfg")
-	} else {
+	if len(home) == 0 || err != nil {
 		credentialsDefault = ".s3cfg"
+	} else {
+		credentialsDefault = filepath.Join(home, ".s3cfg")
 	}
 
 	flag.StringVar(&credentialsFile, "credentialsfile", credentialsDefault, "Credentials file")
@@ -110,7 +110,7 @@ func getConfigs() mainConfig {
 		flag.StringVar(&cgofuseOptions, "cgofuseoptions", "", "Options passed to cgofuse mount")
 	}
 
-	if runtime != "windows" && !cgofuseadapter.CGOFuseAvailable() {
+	if runtime.GOOS != "windows" && !cgofuseadapter.CGOFuseAvailable() {
 		cgofuse = false
 	}
 
