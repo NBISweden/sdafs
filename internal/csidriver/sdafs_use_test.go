@@ -153,12 +153,12 @@ func TestUnmount(t *testing.T) {
 		isMountPoint: isMountPoint,
 	}
 
-	// Non-existant is fine
+	// Non-existent is fine
 	v := volumeInfo{path: nonExistentPath(t)}
 	err := unmount(&d, &v)
-	assert.Nil(t, err, "Nonexistant path is okay for unmount")
+	assert.Nil(t, err, "Nonexistent path is okay for unmount")
 
-	// So is unmounted existant
+	// So is unmounted existent
 	v.path = "testdirunmount" + uuid.New().String()
 	err = d.ensureTargetDir(&v)
 	assert.Nil(t, err, "ensureTargetDir failed for testing unmount")
@@ -199,7 +199,7 @@ func TestIsMountPoint(t *testing.T) {
 	d := Driver{}
 	v := volumeInfo{path: nonExistentPath(t)}
 	ismp := isMountPoint(&d, &v)
-	assert.False(t, ismp, "Nonexistant path is not mount point")
+	assert.False(t, ismp, "Nonexistent path is not mount point")
 
 	_, err := os.Stat("/proc")
 	if err != nil {
@@ -220,11 +220,11 @@ func TestDoMount(t *testing.T) {
 	argloggerPath := "./sdafsarglogger"
 	thisDir := "./"
 
-	nonexistant := nonExistentPath(t)
+	nonexistent := nonExistentPath(t)
 
 	d := Driver{
 		tokenDir:     &tokenDir,
-		sdafsPath:    &nonexistant,
+		sdafsPath:    &nonexistent,
 		isMountPoint: isMountPoint,
 		maxWaitMount: 30 * time.Millisecond,
 	}
