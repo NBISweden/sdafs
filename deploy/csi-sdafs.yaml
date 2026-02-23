@@ -13,8 +13,8 @@ metadata:
     checkov.io/skip6: CKV_K8S_23=Run as root due to above
     checkov.io/skip7: >
       CKV_K8S_16=Bidirectional mount which is needed to actually
-      bring stuff into the pod needs priviliged
-    checkov.io/skip8: CKV_K8S_20=Privilgeded implies privilige escalation
+      bring stuff into the pod needs privileged
+    checkov.io/skip8: CKV_K8S_20=Privileged implies privilege escalation
     checkov.io/skip9: CKV_K8S_15=Not always during development
 spec:
   selector:

@@ -117,7 +117,7 @@ security policies, these are:
   - `runAsUser: 0`
     - needed to access the directory to actually mount directories for pods
 - In container `securityContext`:
-  - `privilged: true`
+  - `privileged: true`
     - needed since we need to use bidirectional mount propagate for mounts
       to show up outside of the CSI pod
   - `allowPrivilegeEscalation: true`
@@ -156,7 +156,7 @@ The csi-provisioner as used will manage secret provisioning when configured in
 the `StorageClass` (see `deploy/storageclass.yaml` for an example). This allows
 a flexible way of providing secrets with the ability to use templates.
 
-The example `StorageClass` menioned will look for a `Secret` in the same
+The example `StorageClass` mentioned will look for a `Secret` in the same
 namespace as the `PersistantVolumeClaim` the provisioner is trying to satisfy,
 as for the actual name of the `Secret`, the example will pick that up from
 annotations to the `PersistantVolumeClaim` (expecting an annotation
@@ -169,7 +169,7 @@ The appointed `Secret` will be searched for the key mentioned above. The value
 will be used to create the file with credentals information passed to `sdafs`.
 
 Using templates in `StorageClass` allows for very flexible scenarios, e.g.
-having multple `PersistantVolumeClaim`s in a namespace using credentials
+having multiple `PersistantVolumeClaim`s in a namespace using credentials
 provided by different `Secret`s.
 
 ### Compatibility and caveats

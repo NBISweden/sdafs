@@ -1336,7 +1336,7 @@ func (s *SDAfs) ReadDir(
 
 	info, ok := s.getInodeOK(op.Inode)
 	if !ok {
-		slog.Info("ReadDir called for non-existant directory",
+		slog.Info("ReadDir called for non-existent directory",
 			"inode", op.Inode)
 		return ENOENT
 	}

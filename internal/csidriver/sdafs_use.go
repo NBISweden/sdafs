@@ -114,7 +114,7 @@ func doMount(d *Driver, v *volumeInfo) error {
 	}
 
 	if v.capability != nil && v.capability.GetAccessMode() != nil {
-		// If we see an unexpeced access mode, we must fail
+		// If we see an unexpected access mode, we must fail
 
 		m := v.capability.GetAccessMode().Mode
 		if m != csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY &&

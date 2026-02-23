@@ -144,7 +144,7 @@ func (r *HTTPReader) Close() (err error) {
 	return nil
 }
 
-// prefetchSzie returns the prefetch size to use, sanity chcked
+// prefetchSzie returns the prefetch size to use, sanity checked
 func (r *HTTPReader) prefetchSize() uint64 {
 	if r.conf.ChunkSize < 64 {
 		return 64 * 1024
