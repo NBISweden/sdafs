@@ -1,6 +1,6 @@
 module github.com/NBISweden/sdafs
 
-go 1.25.0
+go 1.25.7
 
 require (
 	github.com/container-storage-interface/spec v1.12.0
@@ -8,18 +8,18 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jacobsa/fuse v0.0.0-20250702080931-3e9d24d5e3ff
 	github.com/jarcoal/httpmock v1.4.1
-	github.com/neicnordic/crypt4gh v1.14.2
+	github.com/neicnordic/crypt4gh v1.15.0
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/sevlyar/go-daemon v0.1.6
 	github.com/stretchr/testify v1.11.1
 	github.com/tj/assert v0.0.3
 	github.com/winfsp/cgofuse v1.6.0
 	golang.org/x/net v0.51.0
-	golang.org/x/sys v0.41.0
-	google.golang.org/grpc v1.79.1
+	golang.org/x/sys v0.42.0
+	google.golang.org/grpc v1.79.2
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/ini.v1 v1.67.1
-	k8s.io/klog/v2 v2.130.1
+	k8s.io/klog/v2 v2.140.0
 	k8s.io/kubelet v0.35.2
 )
 
