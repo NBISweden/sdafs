@@ -16,7 +16,7 @@ require (
 	github.com/winfsp/cgofuse v1.6.0
 	golang.org/x/net v0.51.0
 	golang.org/x/sys v0.42.0
-	google.golang.org/grpc v1.79.2
+	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/ini.v1 v1.67.1
 	k8s.io/klog/v2 v2.140.0
