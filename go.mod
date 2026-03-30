@@ -20,7 +20,7 @@ require (
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/ini.v1 v1.67.1
 	k8s.io/klog/v2 v2.140.0
-	k8s.io/kubelet v0.35.2
+	k8s.io/kubelet v0.35.3
 )
 
 require (
