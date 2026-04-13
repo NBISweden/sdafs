@@ -15,8 +15,8 @@ require (
 	github.com/tj/assert v0.0.3
 	github.com/winfsp/cgofuse v1.6.0
 	golang.org/x/net v0.52.0
-	golang.org/x/sys v0.42.0
-	google.golang.org/grpc v1.79.3
+	golang.org/x/sys v0.43.0
+	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/ini.v1 v1.67.1
 	k8s.io/klog/v2 v2.140.0
@@ -36,7 +36,7 @@ require (
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260120221211-b8f7ae30c516 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
