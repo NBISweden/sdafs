@@ -39,7 +39,7 @@ jobs:
         uses: robherley/go-test-action@42a1975c97156330b5126c2f35ef0fb78c4c7154
 
       - name: Build image
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: .
           push: false
