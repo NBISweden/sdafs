@@ -36,7 +36,7 @@ jobs:
         run: go build -v ./...
 
       - name: Run test and annotate
-        uses: robherley/go-test-action@42a1975c97156330b5126c2f35ef0fb78c4c7154
+        uses: robherley/go-test-action@72d31c2e7a3502ad0639274dcdc7ffbc7c9c6c4c
 
       - name: Build image
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
