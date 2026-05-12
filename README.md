@@ -19,9 +19,11 @@ This filesystem is supported for use under Windows, but has some caveats:
 This should work as user (without additional privileges) installation on any
 modern system providing the FUSE stack (i.e. `fusermount3`).
 
-This should be usable. There are some possible improvements regarding cache
-handling that can be done and it hasn't currently been tested for very large
-datasets
+## Installation
+
+Just download the corresponding binary for your system. The location of the
+binary at runtime shouldn't matter (but the current directory may influence
+how path references are interpreted, e.g. for pointing to a credentialsfile).
 
 ## Usage
 
