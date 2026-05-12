@@ -24,7 +24,7 @@ modern system providing the FUSE stack (i.e. `fusermount3`).
 Just download the corresponding binary for your system from the repository's
 [Releases](../../releases) page. The location of the binary at runtime
 shouldn't matter (but the current directory may influence how path references
-are interpreted, e.g. for pointing to a credentialsfile).
+are interpreted, e.g. for pointing to a credentials file).
 
 ## Usage
 
