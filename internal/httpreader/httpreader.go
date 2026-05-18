@@ -211,6 +211,9 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 			"error while making request for %s: %v",
 			r.fileURL, err)
 	}
+
+	defer resp.Body.Close() // nolint:errcheck
+
 	duration := time.Since(beforeRequest)
 
 	slog.Log(context.Background(),
@@ -237,7 +240,6 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 				r.fileURL, resp.StatusCode, err)
 		}
 
-		_ = resp.Body.Close()
 		return nil, retErr
 	}
 
