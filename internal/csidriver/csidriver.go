@@ -75,6 +75,7 @@ type Driver struct {
 	// worldOpenSocket signals whatever the sockets we create should have
 	// permissions allowing it to be used by only our user (myUid) if false
 	// or everybody if true
+	// DANGEROUS!
 	worldOpenSocket bool
 
 	// these functions are managed as struct fields to simplify testing
@@ -117,6 +118,7 @@ type CSIConfig struct {
 
 	// WorldOpen signals whatever we should make the socket we create world
 	// accessible or not
+	// DANGEROUS!
 	WorldOpen *bool
 }
 
@@ -249,7 +251,8 @@ func (d *Driver) fixSocketPerms(network, address string) error {
 		return nil
 	}
 
-	// Full world access requested and should be acted on
+	// Full world access requested and should be acted on. This is dangerous
+	// but may be required
 	err := os.Chmod(address, 0o0777)
 	if err != nil {
 		return fmt.Errorf("can't make socket accessible: %v", err)
