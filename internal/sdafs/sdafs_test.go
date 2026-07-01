@@ -48,6 +48,12 @@ func TestConfOptions(t *testing.T) {
 	httpmock.RegisterResponder("GET", "https://my.sda.local/datasets",
 		httpmock.NewStringResponder(200, `{"datasets":["dataset1", "dataset2"],
 		"nextPageToken": null}`))
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset1",
+		httpmock.NewStringResponder(200, `{"files": 0, "size":0, "date":"2026-06-30T14:06:58Z"}`))
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset2",
+		httpmock.NewStringResponder(200, `{"files": 0, "size":0, "date":"2026-06-30T14:06:58Z"}`))
 
 	c := Conf{}
 	c.CredentialsFile = "test.ini"
@@ -148,6 +154,15 @@ func TestDatasetLoad(t *testing.T) {
 	httpmock.RegisterResponder("GET", "https://my.sda.local/datasets",
 		httpmock.NewStringResponder(200, `{"datasets": ["dataset1", "dataset2", "dataset3"],
 		"nextPageToken": null}`))
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset1",
+		httpmock.NewStringResponder(200, `{"files": 10, "size":20, "date":"2026-06-30T14:06:58Z"}`))
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset2",
+		httpmock.NewStringResponder(200, `{"files": 100, "size":200, "date":"2026-06-30T14:06:58Z"}`))
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset3",
+		httpmock.NewStringResponder(200, `{"files": 1000, "size":2000, "date":"2023-06-30T14:06:58Z"}`))
 
 	c := Conf{CredentialsFile: "test.ini",
 		RootURL:    "https://my.sda.local/",
