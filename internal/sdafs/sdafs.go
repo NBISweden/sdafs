@@ -1220,7 +1220,8 @@ func (s *SDAfs) OpenFile(
 	fullReader, err := httpreader.SeekableMultiReader(in.headerReader, contentsReader)
 
 	if err != nil {
-		slog.Error("OpenFile failed - JoinPath error",
+		slog.Error("OpenFile failed - SeekableMultiReader error",
+
 			"key", in.key,
 			"error", err)
 
