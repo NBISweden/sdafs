@@ -217,7 +217,7 @@ type inode struct {
 	// downloadURL is the expected URL suffix used to fetch file contents
 	downloadURL string
 
-	headerReader io.Reader
+	header []byte
 }
 
 // traceLevel is an extra level for more information than debug should give
@@ -1209,20 +1209,21 @@ func (s *SDAfs) OpenFile(
 		return EIO
 	}
 
-	if in.headerReader == nil {
-		in.headerReader, err = s.getHeaderReader(in)
+	if in.header == nil {
+		in.header, err = s.getHeaderBytes(in)
 
 		if err != nil {
-			slog.Error("OpenFile failed - error while creating header reader",
+			slog.Error("OpenFile failed - error while fetching header",
 				"key", in.key,
 				"error", err)
 			return EIO
 		}
 	}
+	headerReader := bytes.NewReader(in.header)
 
 	var inodeReader io.ReadSeekCloser
 
-	fullReader, err := httpreader.SeekableMultiReader(in.headerReader, contentsReader)
+	fullReader, err := httpreader.SeekableMultiReader(headerReader, contentsReader)
 
 	if err != nil {
 		slog.Error("OpenFile failed - SeekableMultiReader error",
@@ -1264,8 +1265,8 @@ func (s *SDAfs) OpenFile(
 	return nil
 }
 
-// getHeaderReader returns a reusable reader for the header object
-func (s *SDAfs) getHeaderReader(i *inode) (io.ReadSeeker, error) {
+// getHeaderBytes returns a byte slice for the header object
+func (s *SDAfs) getHeaderBytes(i *inode) ([]byte, error) {
 
 	headerURL, err := url.JoinPath(i.downloadURL, "header")
 	if err != nil {
@@ -1296,7 +1297,7 @@ func (s *SDAfs) getHeaderReader(i *inode) (io.ReadSeeker, error) {
 			err)
 	}
 
-	return bytes.NewReader(headerContents), nil
+	return headerContents, nil
 }
 
 // ReleaseFileHandle provides close(2)
