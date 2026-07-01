@@ -383,13 +383,15 @@ func (s *SDAfs) getDatasets() error {
 		}
 
 		r, err := s.doRequest(reqURL, "GET")
-		defer r.Body.Close() //nolint:errcheck
-
 		if err != nil {
 			return fmt.Errorf(
 				"error while making dataset request: %v",
 				err)
 		}
+		if r == nil {
+			return fmt.Errorf("error while making dataset request: nil response")
+		}
+		defer r.Body.Close() //nolint:errcheck
 
 		if r.StatusCode != http.StatusOK {
 			return fmt.Errorf(
