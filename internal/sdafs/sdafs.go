@@ -613,8 +613,8 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 				text, err)
 		}
 
-		for _, fileEntry := range fs.Files {
-			fileEntry.Timestamp = timestamp
+		for i := range fs.Files {
+			fs.Files[i].Timestamp = timestamp
 		}
 
 		contents = append(contents, fs.Files...)
