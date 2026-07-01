@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"os/user"
+	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -32,8 +33,6 @@ import (
 	"github.com/neicnordic/crypt4gh/streaming"
 	"gopkg.in/ini.v1"
 )
-
-const s3Prefix = "s3"
 
 // sda-cli version we pretend to be
 const sdaCliVersion = "0.3.0"
@@ -215,8 +214,10 @@ type inode struct {
 	// has varied
 	rawFileSize uint64
 
-	// totalSize (if set) is the total size as delivered for the object
-	totalSize uint64
+	// downloadURL is the expected URL suffix used to fetch file contents
+	downloadURL string
+
+	header []byte
 }
 
 // traceLevel is an extra level for more information than debug should give
@@ -299,13 +300,17 @@ func (s *SDAfs) readToken() error {
 	return fmt.Errorf("no access token found in %s", s.conf.CredentialsFile)
 }
 
-func (s *SDAfs) doRequest(relPath, method string) (*http.Response, error) {
+func (s *SDAfs) doRequest(relPath, method string, extras ...string) (*http.Response, error) {
 
 	reqURL, err := url.JoinPath(s.conf.RootURL, relPath)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"couldn't make full URL from root %s relative %s: %v",
 			s.conf.RootURL, relPath, err)
+	}
+
+	for _, adder := range extras {
+		reqURL = reqURL + adder
 	}
 
 	req, err := http.NewRequest(method, reqURL, nil)
@@ -363,69 +368,88 @@ func (s *SDAfs) extractCookies(r *http.Response) {
 	s.extraHeader = &newHeader
 }
 
+type datasetListResponse struct {
+	Datasets      []string `json:"datasets"`
+	NextPageToken string   `json:"nextPageToken"`
+}
+
 func (s *SDAfs) getDatasets() error {
-	r, err := s.doRequest("/metadata/datasets", "GET")
-
-	if err != nil {
-		return fmt.Errorf(
-			"error while making dataset request: %v",
-			err)
-
-	}
-
-	if r.StatusCode != http.StatusOK {
-		return fmt.Errorf(
-			"dataset request didn't return 200, we got %d",
-			r.StatusCode)
-	}
-
-	// Pick up cookies for further use
-	s.extractCookies(r)
-
-	text, err := io.ReadAll(r.Body)
-	if err != nil {
-		return fmt.Errorf(
-			"error while reading dataset response: %v",
-			err)
-	}
-
-	var ds []string
-
-	err = json.Unmarshal(text, &ds)
-	if err != nil {
-		return fmt.Errorf(
-			"error while doing unmarshal of dataset list %v: %v",
-			text, err)
-	}
-
-	if len(s.conf.DatasetsToShow) == 0 {
-		// Include all datasets we can access
-		s.datasets = ds
-		return nil
-	}
-
-	// We need to filter datasets
 
 	s.datasets = make([]string, 0)
-	for i := range ds {
-		if slices.Contains(s.conf.DatasetsToShow, ds[i]) {
-			s.datasets = append(s.datasets, ds[i])
+	var ds datasetListResponse
+
+	for {
+
+		reqURL := "/datasets"
+		tokenArg := ""
+
+		if len(ds.NextPageToken) != 0 {
+			tokenArg = fmt.Sprintf("?pageToken=%s", ds.NextPageToken)
+		}
+
+		r, err := s.doRequest(reqURL, "GET", tokenArg)
+		if err != nil {
+			return fmt.Errorf(
+				"error while making dataset request: %v",
+				err)
+		}
+		if r == nil {
+			return fmt.Errorf("error while making dataset request: nil response")
+		}
+		defer r.Body.Close() //nolint:errcheck
+
+		if r.StatusCode != http.StatusOK {
+			return fmt.Errorf(
+				"dataset request didn't return 200, we got %d",
+				r.StatusCode)
+		}
+
+		// Pick up cookies for further use
+		s.extractCookies(r)
+
+		text, err := io.ReadAll(r.Body)
+		if err != nil {
+			return fmt.Errorf(
+				"error while reading dataset response: %v",
+				err)
+		}
+
+		err = json.Unmarshal(text, &ds)
+		if err != nil {
+			return fmt.Errorf(
+				"error while doing unmarshal of dataset list %s: %v",
+				string(text), err)
+		}
+
+		if len(s.conf.DatasetsToShow) == 0 {
+			// Include all datasets we can access
+			s.datasets = append(s.datasets, ds.Datasets...)
+		} else {
+
+			// We need to filter datasets
+			for _, dataset := range ds.Datasets {
+				if slices.Contains(s.conf.DatasetsToShow, dataset) {
+					s.datasets = append(s.datasets, dataset)
+				}
+			}
+		}
+
+		if len(ds.NextPageToken) == 0 {
+			return nil
 		}
 	}
-
-	return nil
 }
 
 type datasetFile struct {
 	FileID                    string `json:"fileId"`
 	FilePath                  string `json:"filePath"`
-	DecryptedFileSize         uint64 `json:"decryptedFileSize"`
+	DecryptedFileSize         uint64 `json:"decryptedSize"`
 	DecryptedFileChecksum     string `json:"decryptedFileChecksum"`
 	DecryptedFileChecksumType string `json:"decryptedFileChecksumType"`
-	FileSize                  uint64 `json:"fileSize"`
-	CreatedAt                 string `json:"createdAt"`
-	LastModified              string `json:"lastModified"`
+	FileSize                  uint64 `json:"size"`
+	Timestamp                 time.Time
 	strippedName              string
+	DownloadURL               string `json:"downloadURL"`
 }
 
 func NewSDAfs(conf *Conf) (*SDAfs, error) {
@@ -494,59 +518,132 @@ func (s *SDAfs) checkConnectionLoop() {
 	}
 }
 
-func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
-	rel := fmt.Sprintf("/metadata/datasets/%s/files", datasetName)
-	r, err := s.doRequest(rel, "GET")
+type fileListResponse struct {
+	Files         []datasetFile `json:"files"`
+	NextPageToken string        `json:"nextPageToken"`
+}
 
+type datasetInfoResponse struct {
+	Files     int32  `json:"files"`
+	Date      string `json:"date"`
+	DatasetID string `json:"datasetId"`
+	Size      int64  `json:"size"`
+}
+
+func (s *SDAfs) getDatasetTimestamp(datasetName string) (time.Time, error) {
+	reqURL := fmt.Sprintf("/datasets/%s", datasetName)
+
+	t := time.Time{}
+	datasetInfo := datasetInfoResponse{}
+
+	r, err := s.doRequest(reqURL, "GET")
 	if err != nil {
-		return nil, fmt.Errorf(
-			"error while making dataset request: %v",
+		return t, fmt.Errorf(
+			"error while making dataset info request: %v",
 			err)
 	}
+	defer r.Body.Close() //nolint:errcheck
 
 	if r.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf(
-			"dataset request didn't return 200, we got %d",
+		return t, fmt.Errorf(
+			"dataset info request didn't return 200, we got %d",
 			r.StatusCode)
 	}
 
-	var contents []datasetFile
-
 	text, err := io.ReadAll(r.Body)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"error while reading dataset content response: %v",
+		return t, fmt.Errorf(
+			"error while reading dataset info response: %v",
 			err)
 	}
 
-	err = json.Unmarshal(text, &contents)
+	err = json.Unmarshal(text, &datasetInfo)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"error while doing unmarshal of dataset contents %v: %v",
+		return t, fmt.Errorf(
+			"error while doing unmarshal of dataset info %v: %v",
 			text, err)
 	}
 
-	// Until the archive presents the view they want to expose
-	// we leave this here as a reminder for now, the archive used to present an
-	// extra level in the metadata that had to be removed
+	t, err = time.Parse(time.RFC3339, datasetInfo.Date)
+	if err != nil {
+		return t, fmt.Errorf(
+			"error parsing dataset timestamp: %v",
+			err)
+	}
 
-	// for i := range contents {
-	// 	fp := contents[i].FilePath
-	// 	_, fpnew, found := strings.Cut(fp, "/")
-
-	// 	if found {
-	// 		contents[i].FilePath = fpnew
-	// 	}
-	// }
-
-	return contents, nil
+	return t, nil
 }
 
-func (s *SDAfs) createRoot() {
+func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
+
+	contents := make([]datasetFile, 0)
+	fs := fileListResponse{}
+
+	timestamp, err := s.getDatasetTimestamp(datasetName)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"dataset timestamp request failed: %w",
+			err)
+	}
+
+	for {
+		reqURL := fmt.Sprintf("/datasets/%s/files", datasetName)
+
+		tokenArg := ""
+		if len(fs.NextPageToken) != 0 {
+			tokenArg = fmt.Sprintf("?pageToken=%s", fs.NextPageToken)
+		}
+
+		r, err := s.doRequest(reqURL, "GET", tokenArg)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"error while making dataset request: %v",
+				err)
+		}
+
+		if r == nil || r.Body == nil {
+			return nil, fmt.Errorf("error while making dataset request: empty response")
+		}
+
+		defer r.Body.Close() //nolint:errcheck
+
+		if r.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf(
+				"dataset request didn't return 200, we got %d",
+				r.StatusCode)
+		}
+
+		text, err := io.ReadAll(r.Body)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"error while reading dataset content response: %v",
+				err)
+		}
+
+		err = json.Unmarshal(text, &fs)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"error while doing unmarshal of dataset contents %v: %v",
+				text, err)
+		}
+
+		for i := range fs.Files {
+			fs.Files[i].Timestamp = timestamp
+		}
+
+		contents = append(contents, fs.Files...)
+
+		if len(fs.NextPageToken) == 0 {
+			return contents, nil
+		}
+	}
+}
+
+func (s *SDAfs) createRoot() error {
 
 	if len(s.inodes) > 0 {
 		// Already done
-		return
+		return nil
 	}
 
 	entries := make([]Dirent, 0)
@@ -568,8 +665,19 @@ func (s *SDAfs) createRoot() {
 
 	for i, dataset := range s.datasets {
 
+		datasetAttrs := dirAttrs
+
+		ts, err := s.getDatasetTimestamp(dataset)
+		if err != nil {
+			return fmt.Errorf("timestamp for %s failed: %w", dataset, err)
+		}
+
+		datasetAttrs.Atime = ts
+		datasetAttrs.Ctime = ts
+		datasetAttrs.Mtime = ts
+
 		datasetInode := inode{
-			attr:    dirAttrs,
+			attr:    datasetAttrs,
 			dir:     true,
 			dataset: dataset,
 			key:     "/",
@@ -587,6 +695,7 @@ func (s *SDAfs) createRoot() {
 	}
 
 	root.entries = entries
+	return nil
 }
 
 // loadDataset brings in the requested dataset
@@ -628,11 +737,15 @@ func (s *SDAfs) loadDataset(dataSetName string) error {
 	return nil
 }
 
+// trimNames cleans up paths and possibly removes .c4gh suffixes
 func (s *SDAfs) trimNames(contents []datasetFile) {
 	for i, entry := range contents {
 
-		split := strings.Split(entry.FilePath, "/")
-		fileName := split[len(split)-1]
+		// Remove any starting slashes
+		entry.FilePath = strings.TrimLeft(entry.FilePath, "/")
+		entry.FilePath = path.Clean(entry.FilePath)
+
+		_, fileName := path.Split(entry.FilePath)
 
 		if s.conf.RemoveSuffix {
 			//	We should remove c4gh suffix
@@ -668,11 +781,6 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 
 	if s.conf.SkipLevels > 0 {
 		split = split[s.conf.SkipLevels:]
-	}
-
-	if len(split) < 2 {
-		// Entry directly in the base of the dataset
-		return
 	}
 
 	parent := ""
@@ -726,30 +834,6 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 
 	// The directory structure should exist now
 
-	mtime := s.startTime
-	ctime := s.startTime
-	var err error
-
-	if len(entry.LastModified) > 0 {
-		mtime, err = time.Parse(time.RFC3339, entry.LastModified)
-		if err != nil {
-			slog.Error("Error while decoding modified timestamp",
-				"fileid", entry.FileID,
-				"timestamp", entry.LastModified,
-				"error", err)
-		}
-	}
-
-	if len(entry.CreatedAt) > 0 {
-		ctime, err = time.Parse(time.RFC3339, entry.CreatedAt)
-		if err != nil {
-			slog.Error("Error while decoding created timestamp",
-				"fileid", entry.FileID,
-				"timestamp", entry.CreatedAt,
-				"error", err)
-		}
-	}
-
 	dirName := filepath.Join(split[:len(split)-1]...)
 
 	fInode := inode{
@@ -757,15 +841,16 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 			Nlink: 1,
 			Uid:   s.Owner,
 			Gid:   s.Group,
-			Mtime: mtime,
-			Ctime: ctime,
-			Atime: mtime,
+			Mtime: entry.Timestamp,
+			Ctime: entry.Timestamp,
+			Atime: entry.Timestamp,
 			Mode:  s.FilePerms,
 			Size:  entry.DecryptedFileSize,
 		},
 		dir:         false,
 		dataset:     dataSetName,
 		key:         entry.FilePath,
+		downloadURL: entry.DownloadURL,
 		fileSize:    entry.DecryptedFileSize,
 		rawFileSize: entry.FileSize,
 	}
@@ -839,7 +924,7 @@ func (s *SDAfs) setup() error {
 				err)
 		}
 
-		defer caFile.Close() // nolint:errcheck
+		defer caFile.Close() //nolint:errcheck
 
 		pems, err := io.ReadAll(caFile)
 		if err != nil {
@@ -919,7 +1004,7 @@ func (s *SDAfs) setup() error {
 
 	header := make(http.Header)
 	s.extraHeader = &header
-	s.extraHeader.Add("Client-Public-Key", publicKeyEncoded)
+	s.extraHeader.Add("X-C4GH-Public-Key", publicKeyEncoded)
 	s.extraHeader.Add("SDA-Client-Version", sdaCliVersion)
 
 	s.httpReaderConf = &httpreader.Conf{
@@ -949,7 +1034,12 @@ func (s *SDAfs) VerifyCredentials() error {
 			err)
 	}
 
-	s.createRoot()
+	err = s.createRoot()
+	if err != nil {
+		return fmt.Errorf("error while creating root: %w",
+			err)
+	}
+
 	return nil
 }
 
@@ -1089,6 +1179,7 @@ func (s *SDAfs) OpenFile(
 			"Returning permission error for open",
 			"inode", op.Inode,
 			"err", err)
+
 		return err
 	}
 
@@ -1101,12 +1192,21 @@ func (s *SDAfs) OpenFile(
 
 	if in.dir {
 		slog.Info("OpenFile of directory", "inode", op.Inode)
+
 		return EINVAL
 	}
 
-	r, err := httpreader.NewHTTPReader(s.httpReaderConf,
-		&httpreader.Request{FileURL: s.getFileURL(in),
-			ObjectSize: s.getTotalSize(in)})
+	contentsURL, err := url.JoinPath(s.conf.RootURL, in.downloadURL, "content")
+	if err != nil {
+		slog.Error("OpenFile failed - JoinPath error",
+			"error", err)
+
+		return EIO
+	}
+
+	contentsReader, err := httpreader.NewHTTPReader(s.httpReaderConf,
+		&httpreader.Request{FileURL: contentsURL,
+			ObjectSize: in.rawFileSize})
 	if err != nil {
 		slog.Error("OpenFile failed - error while creating reader",
 			"key", in.key,
@@ -1114,18 +1214,39 @@ func (s *SDAfs) OpenFile(
 		return EIO
 	}
 
+	if in.header == nil {
+		in.header, err = s.getHeaderBytes(in)
+
+		if err != nil {
+			slog.Error("OpenFile failed - error while fetching header",
+				"key", in.key,
+				"error", err)
+			return EIO
+		}
+	}
+	headerReader := bytes.NewReader(in.header)
+
 	var inodeReader io.ReadSeekCloser
 
-	c4ghr, err := streaming.NewCrypt4GHReader(r, s.privateC4GHkey, nil)
+	combinedReader, err := httpreader.SeekableMultiReader(headerReader, contentsReader)
 
 	if err != nil {
-		// Assume we are served non-encrypted content
-		inodeReader = r
-		slog.Debug("OpenFile automatic crypt4gh failed",
+		slog.Error("OpenFile failed - SeekableMultiReader error",
+
 			"key", in.key,
 			"error", err)
-	} else {
-		inodeReader = c4ghr
+
+		return EIO
+	}
+
+	inodeReader, err = streaming.NewCrypt4GHReader(combinedReader, s.privateC4GHkey, nil)
+
+	if err != nil {
+
+		slog.Error("Crypt4GHReader creation failed",
+			"key", in.key,
+			"error", err)
+		return EIO
 	}
 
 	// Note: HTTPReader supports Close but doesn't really care for it so
@@ -1147,6 +1268,41 @@ func (s *SDAfs) OpenFile(
 	op.Handle = id
 
 	return nil
+}
+
+// getHeaderBytes returns a byte slice for the header object
+func (s *SDAfs) getHeaderBytes(i *inode) ([]byte, error) {
+
+	headerURL, err := url.JoinPath(i.downloadURL, "header")
+	if err != nil {
+		return nil, fmt.Errorf(
+			"error from joinpath for header request: %w",
+			err)
+	}
+
+	r, err := s.doRequest(headerURL, "GET")
+	if err != nil {
+		return nil, fmt.Errorf(
+			"error while making header request: %w",
+			err)
+	}
+
+	defer r.Body.Close() //nolint:errcheck
+
+	if r.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf(
+			"header request didn't return 200, we got %v",
+			r.StatusCode)
+	}
+
+	headerContents, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"error while reading header response: %w",
+			err)
+	}
+
+	return headerContents, nil
 }
 
 // ReleaseFileHandle provides close(2)
@@ -1212,79 +1368,6 @@ func (s *SDAfs) getNewIDLocked() (HandleID, error) {
 			return id, nil
 		}
 	}
-}
-
-// getFileURL returns the path to use when requesting the HTTPReader
-func (s *SDAfs) getFileURL(i *inode) string {
-
-	u, err := url.JoinPath(s.conf.RootURL, s3Prefix, i.dataset, i.key)
-
-	if err != nil {
-		slog.Debug("Failed to create access URL",
-			"key", i.key,
-			"error", err)
-		return ""
-	}
-
-	return u
-}
-
-// getTotalSize figures out the raw size of the object as presented
-func (s *SDAfs) getTotalSize(i *inode) uint64 {
-
-	if i.totalSize != 0 {
-		return i.totalSize
-	}
-
-	objectUrl, err := url.JoinPath(s3Prefix, i.dataset, i.key)
-	if err != nil {
-		slog.Debug("Error while making URL for size check",
-			"key", i.key,
-			"error", err)
-		return 0
-	}
-
-	r, err := s.doRequest(objectUrl, "HEAD")
-	if err != nil {
-		slog.Debug("Error while making request to URL for size check",
-			"key", i.key,
-			"url", objectUrl,
-			"error", err)
-		return 0
-	}
-
-	size := r.Header.Get("Content-Length")
-	if size != "" {
-		var rawSize uint64
-		n, err := fmt.Sscanf(size, "%d", &rawSize)
-
-		if err == nil && n == 1 {
-			i.totalSize = rawSize
-			return rawSize
-		}
-	}
-
-	// No content-length or issue decoding, check with server-additional-bytes
-	extra := r.Header.Get("Server-Additional-Bytes")
-	if extra != "" {
-		var extraBytes uint64
-		n, err := fmt.Sscanf(extra, "%d", &extraBytes)
-
-		if err == nil && n == 1 {
-			i.totalSize = extraBytes + i.rawFileSize
-
-			return extraBytes + i.rawFileSize
-		}
-	}
-
-	// No header helps, use a reasonable default
-
-	slog.Debug("HEAD didn't help for total size, using default 124",
-		"url", objectUrl,
-		"key", i.key)
-	i.totalSize = 124 + i.rawFileSize
-
-	return 124 + i.rawFileSize
 }
 
 func (s *SDAfs) ReadFile(

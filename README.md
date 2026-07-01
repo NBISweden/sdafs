@@ -19,6 +19,23 @@ This filesystem is supported for use under Windows, but has some caveats:
 This should work as user (without additional privileges) installation on any
 modern system providing the FUSE stack (i.e. `fusermount3`).
 
+## Version selection
+
+There currently exist two versions of sdafs, corresponding to different
+versions of the download service for the sensitive data archive.
+
+Version 1 is legacy and receives needed fixes only. Version 2 is considered
+under development and welcomes suggestions.
+
+To determine which version you need, you can see whether your download service offers
+a `/service-info` (e.g.
+[https://download.bp.nbis.se/service-info](https://download.bp.nbis.se/service-info)).
+If that works and gives you something about "SDA Download", the service you
+want to use likely runs version 2 of the download service and you should pick
+that version of sdafs. If you instead get an error (e.g. 404/Not found), they're
+probably running the legacy download service and you'll need to use sdafs
+version 1.
+
 ## Installation
 
 Just download the corresponding binary for your system from the repository's

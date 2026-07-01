@@ -1,7 +1,9 @@
 package sdafs
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -10,10 +12,15 @@ import (
 	"os/user"
 	"path"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jarcoal/httpmock"
+	"github.com/neicnordic/crypt4gh/keys"
+	"github.com/neicnordic/crypt4gh/model/headers"
+	"github.com/neicnordic/crypt4gh/streaming"
+	"github.com/stretchr/testify/suite"
 	"github.com/tj/assert"
 )
 
@@ -42,11 +49,244 @@ func gid() uint32 {
 
 }
 
+func preLoadDatasetResponses(t *testing.T) {
+	httpmock.RegisterResponder("GET", "https://my.sda.local/datasets",
+		httpmock.NewStringResponder(200, `{"datasets": ["dataset1", "dataset2", "dataset3"], 
+		"nextPageToken": null}`))
+
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset1",
+		httpmock.NewStringResponder(200, `{"files": 10, "size":20, "date":"2026-06-30T14:06:58Z"}`))
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset2",
+		httpmock.NewStringResponder(200, `{"files": 100, "size":200, "date":"2026-06-30T14:06:58Z"}`))
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset3",
+		httpmock.NewStringResponder(200, `{"files": 1000, "size":2000, "date":"2023-06-30T14:06:58Z"}`))
+
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset1/files",
+		httpmock.NewStringResponder(200, `{"files": [], "nextPageToken":null}`))
+
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset1",
+		httpmock.NewStringResponder(200, `{"files": 0, "size":0, "date":"2026-06-30T01:01:01Z"}`))
+
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset2/files",
+		httpmock.NewStringResponder(200, `{"files": [], "nextPageToken":null}`))
+
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset2",
+		httpmock.NewStringResponder(200, `{"files": 0, "size":0, "date":"2026-06-30T02:02:02Z"}`))
+
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset3/files",
+		httpmock.NewStringResponder(200, `{"files": [
+		{ "fileId": "1", 
+			"filePath":"file1",
+			"size": 14000
+		}, 
+		{ "fileId": "2", 
+			"filePath":"dir1/file2",
+			"size": 1000,
+			"downloadURL": "broken"
+		},
+		{ "fileId": "3",
+			"downloadURL": "files/file3",
+			"filePath":"dir1/file3",
+			"size": 100
+		}
+			], "nextPageToken": null}`))
+
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset3",
+		httpmock.NewStringResponder(200, `{"files": 3, "size":16000, "date":"2026-06-30T03:03:03Z"}`))
+
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/broken/header",
+		httpmock.NewStringResponder(500, `{}`))
+
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/broken/content",
+		httpmock.NewStringResponder(500, `{}`))
+}
+
+type cryptSuite struct {
+	suite.Suite
+
+	private          [32]byte
+	public           [32]byte
+	data             []byte
+	encryptedContent []byte
+	headerLength     int
+}
+
+func (s *cryptSuite) preloadFetchData(t *testing.T) {
+
+	var err error
+	s.private, s.public, err = keys.GenerateKeyPair()
+	assert.Nil(t, err, "Key-pair generation failed")
+
+	t.Logf("Keypair generated: private %v, public: %v", s.private, s.public)
+	s.data = []byte("this is just some random bytes")
+
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/files/file3/header",
+		s.encryptingResponder)
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/files/file3/content",
+		s.encryptingResponder)
+}
+
+// getEncryptedContents generates an entire encrypted object as a []byte and
+// returns that including an int that tells where the header ends
+func (s *cryptSuite) getEncryptedContents(req *http.Request) ([]byte, int, error) {
+	// We can't reencrypt every time since the header and content aren't fetched together
+
+	if len(s.encryptedContent) > 0 {
+		return s.encryptedContent, s.headerLength, nil
+	}
+
+	// t := s.T()
+
+	buf := new(bytes.Buffer)
+
+	publicKeyHeader := req.Header.Get("X-C4GH-Public-Key")
+	if publicKeyHeader == "" {
+		return nil, 0, fmt.Errorf("No public key provided")
+	}
+
+	nobase, err := base64.StdEncoding.DecodeString(publicKeyHeader)
+	if err != nil {
+		return nil, 0, fmt.Errorf("decoding base64 public key header string (%s) failed: %w",
+			publicKeyHeader,
+			err)
+	}
+
+	// t.Logf("public key decoded from base64: %s", string(nobase))
+
+	public, err := keys.ReadPublicKey(bytes.NewBuffer(nobase))
+	if err != nil {
+		return nil, 0, fmt.Errorf("reading public key from header string (%s) failed: %w",
+			publicKeyHeader,
+			err)
+	}
+
+	// t.Logf("public key is %v", public)
+	c4ghwriter, err := streaming.NewCrypt4GHWriter(buf, s.private, [][32]byte{public, s.public}, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("newcrypt4ghwriter failed: %w", err)
+	}
+
+	wrote, err := c4ghwriter.Write(s.data)
+	if err != nil {
+		return nil, 0, fmt.Errorf("writing encrypted failed: %w", err)
+	}
+	if wrote != len(s.data) {
+		return nil, 0, fmt.Errorf("less data written (%v) than expected (%v)",
+			wrote,
+			len(s.data))
+	}
+
+	c4ghwriter.Close()
+	content := buf.Bytes()
+
+	headerBuffer := bytes.NewReader(bytes.Clone(content))
+	_, err = headers.ReadHeader(headerBuffer)
+	if err != nil {
+		return nil, 0, fmt.Errorf("readheader failed: %w", err)
+	}
+
+	// Length of header is original size minus
+	s.headerLength = len(content) - headerBuffer.Len()
+	s.encryptedContent = content
+
+	return bytes.Clone(s.encryptedContent), s.headerLength, nil
+}
+
+func (s *cryptSuite) encryptingResponder(req *http.Request) (*http.Response, error) {
+	// encrypting responder deals with the dynamic request that needs to respond
+	// for a requested
+	t := s.T()
+	t.Logf("handling request for contents: %s", req.URL.Path)
+	r := http.Response{}
+
+	content, headerLength, err := s.getEncryptedContents(req)
+	if err != nil {
+		return nil, fmt.Errorf("getting encrypted contents failed: %w", err)
+	}
+
+	contentStart, contentEnd, valid := decodeRange(t, req.Header)
+
+	if !valid {
+		contentStart = 0
+		contentEnd = len(content) - s.headerLength
+	}
+
+	if headerLength+contentStart > len(content) {
+		contentStart = len(content) - headerLength
+		contentEnd = len(content) - headerLength
+	}
+	if headerLength+contentEnd > len(content) {
+		contentEnd = len(content) - headerLength
+	}
+
+	t.Logf("Contents total is: %v", content)
+
+	if strings.HasSuffix(req.URL.Path, "/header") {
+		t.Logf("sending header %v", content[:headerLength])
+		r.Body = io.NopCloser(bytes.NewReader(content[:headerLength]))
+	} else {
+		t.Logf("sending content %v", content[headerLength+contentStart:headerLength+contentEnd])
+		t.Logf("Passing %v %v", contentStart, contentEnd)
+		r.Body = io.NopCloser(bytes.NewReader(content[headerLength+contentStart : headerLength+contentEnd]))
+	}
+
+	r.StatusCode = 200
+	return &r, nil
+}
+
+// decodes the Range
+func decodeRange(t *testing.T, h http.Header) (start int, end int, valid bool) {
+
+	hrange := h.Get("Range")
+	if hrange == "" {
+		return
+	}
+
+	parts := strings.FieldsFunc(hrange, func(r rune) bool {
+		if r == '-' || r == '=' || r == ',' {
+			return true
+		}
+		return false
+	})
+
+	if len(parts) != 3 {
+		return
+	}
+
+	startv, err := strconv.ParseInt(parts[1], 10, 32)
+	if err != nil {
+		return
+	}
+	start = int(startv)
+
+	endv, err := strconv.ParseInt(parts[2], 10, 32)
+	if err != nil {
+		return
+	}
+
+	end = int(endv)
+
+	valid = true
+	return
+}
+
 func TestConfOptions(t *testing.T) {
 
 	httpmock.Activate()
-	httpmock.RegisterResponder("GET", "https://my.sda.local/metadata/datasets",
-		httpmock.NewStringResponder(200, `["dataset1", "dataset2"]`))
+	preLoadDatasetResponses(t)
 
 	c := Conf{}
 	c.CredentialsFile = "test.ini"
@@ -100,7 +340,7 @@ func TestNewSDAfs(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
-	httpmock.RegisterResponder("GET", "https://my.sda.local/metadata/datasets",
+	httpmock.RegisterResponder("GET", "https://my.sda.local/datasets",
 		httpmock.NewStringResponder(500, "Something wrong"))
 
 	c.CredentialsFile = "test.ini"
@@ -111,15 +351,13 @@ func TestNewSDAfs(t *testing.T) {
 	assert.Nil(t, sda, "Got a sda when we should not")
 	assert.NotNil(t, err, "No error when expected")
 
-	httpmock.RegisterResponder("GET", "https://my.sda.local/metadata/datasets",
-		httpmock.NewStringResponder(200, `["dataset1", "dataset2"]`))
+	preLoadDatasetResponses(t)
 	sda, err = NewSDAfs(&c)
-
-	assert.NotNil(t, sda, "Did not get a sda when we should")
 	assert.Nil(t, err, "Unexpected error")
+	assert.NotNil(t, sda, "Did not get a sda when we should")
 
 	assert.NotNil(t, sda.inodes, "inodes in sda is nil")
-	assert.Equal(t, 3, len(sda.inodes), "inodes in sda is unexpected length")
+	assert.Equal(t, 4, len(sda.inodes), "inodes in sda is unexpected length")
 
 	// Test certificate handling
 
@@ -144,53 +382,32 @@ func TestDatasetLoad(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
-	httpmock.RegisterResponder("GET", "https://my.sda.local/metadata/datasets",
-		httpmock.NewStringResponder(200, `["dataset1", "dataset2", "dataset3"]`))
+	preLoadDatasetResponses(t)
 
 	c := Conf{CredentialsFile: "test.ini",
 		RootURL:    "https://my.sda.local/",
 		HTTPClient: http.DefaultClient}
 
 	sda, err := NewSDAfs(&c)
+	assert.Nil(t, err, "Unexpected error")
+	assert.NotNil(t, sda.datasets, "No datasets although no error")
 	assert.Equal(t, []string{"dataset1", "dataset2", "dataset3"}, sda.datasets)
 
-	assert.Nil(t, err, "Unexpected error")
 	assert.NotNil(t, sda, "Did not get a sda when we should")
 
 	assert.NotNil(t, sda.inodes, "inodes in sda is nil")
 	assert.Equal(t, 4, len(sda.inodes), "inodes in sda is unexpected length")
-
-	httpmock.RegisterResponder("GET",
-		"https://my.sda.local/metadata/datasets/dataset1/files",
-		httpmock.NewStringResponder(200, `[]`))
 
 	// NB: inodes is a map, not an array
 	err = sda.checkLoaded(sda.inodes[2])
 	assert.Nil(t, err, "Unexpected error")
 
 	httpmock.RegisterResponder("GET",
-		"https://my.sda.local/metadata/datasets/dataset2/files",
+		"https://my.sda.local/datasets/dataset2/files",
 		httpmock.NewStringResponder(500, `[]`))
 	err = sda.checkLoaded(sda.inodes[3])
 	assert.NotNil(t, err, "Unexpected lack of error")
 
-	httpmock.RegisterResponder("GET",
-		"https://my.sda.local/metadata/datasets/dataset3/files",
-		httpmock.NewStringResponder(200, `[
-		{ "fileId": "1", 
-			"filePath":"/file1",
-			"fileSize": 14000
-		}, 
-		{ "fileId": "2", 
-			"filePath":"/dir1/file2",
-			"fileSize": 1000
-		},
-		{ "fileId": "3", 
-			"filePath":"/dir1/file3",
-			"fileSize": 1000
-		}
-
-			]`))
 	err = sda.checkLoaded(sda.inodes[4])
 	assert.Nil(t, err, "Unexpected error")
 	assert.Equal(t, 8, len(sda.inodes), "inodes in sda is unexpected length")
@@ -245,7 +462,7 @@ func TestSessionHandling(t *testing.T) {
 					Value: cookieval,
 				})
 				w.WriteHeader(200)
-				w.Write([]byte("[]\n")) // nolint:errcheck
+				w.Write([]byte(`{"datasets":[]}`)) // nolint:errcheck
 				return
 			}
 
@@ -263,7 +480,7 @@ func TestSessionHandling(t *testing.T) {
 			}
 
 			w.WriteHeader(200)
-			w.Write([]byte("[]\n")) // nolint:errcheck
+			w.Write([]byte(`{"datasets":[]}`)) // nolint:errcheck
 		})
 
 	go http.Serve(listener, nil) // nolint:errcheck
@@ -317,4 +534,76 @@ func TestGetNewIdLocked(t *testing.T) {
 	_, exists := s.handles[id]
 
 	assert.False(t, exists, "Handle from getNewIdLocked should not exist")
+}
+
+func (s *cryptSuite) TestOpenFile() {
+	t := s.T()
+
+	httpmock.Activate(t)
+	preLoadDatasetResponses(t)
+	s.preloadFetchData(t)
+
+	c := Conf{
+		CredentialsFile:  "test.ini",
+		RootURL:          "https://my.sda.local",
+		HTTPClient:       http.DefaultClient,
+		GID:              1200,
+		UID:              999,
+		DirPerms:         0777,
+		FilePerms:        0777,
+		SpecifyDirPerms:  true,
+		SpecifyFilePerms: true,
+	}
+
+	sda, err := NewSDAfs(&c)
+
+	assert.Nil(t, err, "Unexpected error")
+	assert.NotNil(t, sda, "Did not get a sda when we should")
+
+	var datasetInode InodeID
+	var fileInode InodeID
+
+	for k, v := range sda.inodes {
+		if v.dataset == "dataset3" {
+			datasetInode = k
+		}
+	}
+
+	openDirOp := OpenDirOp{
+		Inode: InodeID(datasetInode),
+	}
+
+	err = sda.OpenDir(context.TODO(), &openDirOp)
+	assert.Nil(t, err, "Unexpected error")
+
+	readDirOp := ReadDirOp{
+		Handle: openDirOp.Handle,
+		Inode:  openDirOp.Inode,
+	}
+	err = sda.ReadDir(context.TODO(), &readDirOp)
+	assert.Nil(t, err, "Unexpected error")
+
+	for k, v := range sda.inodes {
+		if v.dataset == "dataset3" && v.key == "dir1/file3" {
+			fileInode = k
+		}
+	}
+
+	openFileOp := OpenFileOp{Inode: fileInode}
+	err = sda.OpenFile(context.TODO(), &openFileOp)
+	assert.Nil(t, err, "Unexpected error from openfile")
+
+	readFileOp := ReadFileOp{
+		Handle: openFileOp.Handle,
+		Dst:    make([]byte, 1024),
+	}
+	err = sda.ReadFile(context.TODO(), &readFileOp)
+	assert.Nil(t, err, "Unexpected error from readfile")
+
+}
+
+func TestRunCryptSuite(t *testing.T) {
+	s := cryptSuite{}
+
+	suite.Run(t, &s)
 }

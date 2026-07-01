@@ -46,7 +46,7 @@ func testDataResponder(r *http.Request) (*http.Response, error) {
 
 	data := make([]byte, 14000)
 
-	key := r.Header.Get("Client-Public-Key")
+	key := r.Header.Get("X-C4GH-Public-Key")
 	if key == "" {
 		// Fail if we don't get a good header
 		resp := http.Response{StatusCode: http.StatusInternalServerError}
@@ -83,7 +83,7 @@ func testDataResponder(r *http.Request) (*http.Response, error) {
 
 func clientPublicKeyHeader() *http.Header {
 	h := make(http.Header)
-	h.Add("Client-Public-Key", "thisisset")
+	h.Add("X-C4GH-Public-Key", "thisisset")
 	return &h
 }
 

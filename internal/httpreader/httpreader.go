@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -163,26 +162,6 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 
 	useURL := r.fileURL
 
-	if rangeSpec != "" {
-		// Archive being broken regarding ranges for now,
-		// use query parameters as well to trigger partial file delivery
-
-		byteRange := strings.TrimPrefix(rangeSpec, "bytes=")
-		byteRanges := strings.Split(byteRange, "-")
-
-		if byteRanges[0] == "" {
-			useURL += "?startCoordinate=0"
-		} else {
-			useURL += "?startCoordinate=" + byteRanges[0]
-		}
-
-		if byteRanges[1] == "" {
-			useURL += "&endCoordinate=" + fmt.Sprintf("%d", r.objectSize)
-		} else {
-			useURL += "&endCoordinate=" + byteRanges[1]
-		}
-	}
-
 	req, err := http.NewRequest("GET", useURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -223,7 +202,7 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 		"duration", duration,
 	)
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode > 299 {
 		errData, err := io.ReadAll(resp.Body)
 
 		retErr := fmt.Errorf(
