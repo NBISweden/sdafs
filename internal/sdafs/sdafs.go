@@ -34,8 +34,6 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-const s3Prefix = "s3"
-
 // sda-cli version we pretend to be
 const sdaCliVersion = "0.3.0"
 
@@ -215,9 +213,6 @@ type inode struct {
 	// rawFileSize is the file size as reported by the archive, quality of this
 	// has varied
 	rawFileSize uint64
-
-	// totalSize (if set) is the total size as delivered for the object
-	totalSize uint64
 
 	// downloadURL is the expected URL suffix used to fetch file contents
 	downloadURL string
@@ -1251,7 +1246,7 @@ func (s *SDAfs) getHeaderReader(i *inode) (io.ReadSeeker, error) {
 	headerURL, err := url.JoinPath(i.downloadURL, "header")
 	if err != nil {
 		return nil, fmt.Errorf(
-			"error from joinpath fo header request: %w",
+			"error from joinpath for header request: %w",
 			err)
 	}
 
