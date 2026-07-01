@@ -383,6 +383,7 @@ func (s *SDAfs) getDatasets() error {
 		}
 
 		r, err := s.doRequest(reqURL, "GET")
+		defer r.Body.Close() //nolint:errcheck
 
 		if err != nil {
 			return fmt.Errorf(
@@ -525,9 +526,11 @@ type datasetInfoResponse struct {
 func (s *SDAfs) getDatasetTimestamp(datasetName string) (time.Time, error) {
 	reqURL := fmt.Sprintf("/datasets/%s", datasetName)
 
-	datasetInfo := datasetInfoResponse{}
-	r, err := s.doRequest(reqURL, "GET")
 	t := time.Time{}
+	datasetInfo := datasetInfoResponse{}
+
+	r, err := s.doRequest(reqURL, "GET")
+	defer r.Body.Close() //nolint:errcheck
 
 	if err != nil {
 		return t, fmt.Errorf(
@@ -586,6 +589,7 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 		}
 
 		r, err := s.doRequest(reqURL, "GET")
+		defer r.Body.Close() //nolint:errcheck
 
 		if err != nil {
 			return nil, fmt.Errorf(
@@ -625,11 +629,11 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 	}
 }
 
-func (s *SDAfs) createRoot() {
+func (s *SDAfs) createRoot() error {
 
 	if len(s.inodes) > 0 {
 		// Already done
-		return
+		return nil
 	}
 
 	entries := make([]Dirent, 0)
@@ -651,8 +655,19 @@ func (s *SDAfs) createRoot() {
 
 	for i, dataset := range s.datasets {
 
+		datasetAttrs := dirAttrs
+
+		ts, err := s.getDatasetTimestamp(dataset)
+		if err != nil {
+			return fmt.Errorf("timestamp for %s failed: %w", dataset, err)
+		}
+
+		datasetAttrs.Atime = ts
+		datasetAttrs.Ctime = ts
+		datasetAttrs.Mtime = ts
+
 		datasetInode := inode{
-			attr:    dirAttrs,
+			attr:    datasetAttrs,
 			dir:     true,
 			dataset: dataset,
 			key:     "/",
@@ -670,6 +685,7 @@ func (s *SDAfs) createRoot() {
 	}
 
 	root.entries = entries
+	return nil
 }
 
 // loadDataset brings in the requested dataset
@@ -808,9 +824,6 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 
 	// The directory structure should exist now
 
-	mtime := s.startTime
-	ctime := s.startTime
-
 	dirName := filepath.Join(split[:len(split)-1]...)
 
 	fInode := inode{
@@ -818,9 +831,9 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 			Nlink: 1,
 			Uid:   s.Owner,
 			Gid:   s.Group,
-			Mtime: mtime,
-			Ctime: ctime,
-			Atime: mtime,
+			Mtime: entry.Timestamp,
+			Ctime: entry.Timestamp,
+			Atime: entry.Timestamp,
 			Mode:  s.FilePerms,
 			Size:  entry.DecryptedFileSize,
 		},
@@ -901,7 +914,7 @@ func (s *SDAfs) setup() error {
 				err)
 		}
 
-		defer caFile.Close() // nolint:errcheck
+		defer caFile.Close() //nolint:errcheck
 
 		pems, err := io.ReadAll(caFile)
 		if err != nil {
@@ -1011,7 +1024,12 @@ func (s *SDAfs) VerifyCredentials() error {
 			err)
 	}
 
-	s.createRoot()
+	err = s.createRoot()
+	if err != nil {
+		return fmt.Errorf("error while creating root: %w",
+			err)
+	}
+
 	return nil
 }
 
@@ -1251,6 +1269,7 @@ func (s *SDAfs) getHeaderReader(i *inode) (io.ReadSeeker, error) {
 	}
 
 	r, err := s.doRequest(headerURL, "GET")
+	defer r.Body.Close() //nolint:errcheck
 
 	if err != nil {
 		return nil, fmt.Errorf(
