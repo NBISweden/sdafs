@@ -45,8 +45,9 @@ func gid() uint32 {
 func TestConfOptions(t *testing.T) {
 
 	httpmock.Activate()
-	httpmock.RegisterResponder("GET", "https://my.sda.local/metadata/datasets",
-		httpmock.NewStringResponder(200, `["dataset1", "dataset2"]`))
+	httpmock.RegisterResponder("GET", "https://my.sda.local/datasets",
+		httpmock.NewStringResponder(200, `{"datasets":["dataset1", "dataset2"],
+		"nextPageToken": null}`))
 
 	c := Conf{}
 	c.CredentialsFile = "test.ini"
@@ -100,7 +101,7 @@ func TestNewSDAfs(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
-	httpmock.RegisterResponder("GET", "https://my.sda.local/metadata/datasets",
+	httpmock.RegisterResponder("GET", "https://my.sda.local/datasets",
 		httpmock.NewStringResponder(500, "Something wrong"))
 
 	c.CredentialsFile = "test.ini"
@@ -111,12 +112,12 @@ func TestNewSDAfs(t *testing.T) {
 	assert.Nil(t, sda, "Got a sda when we should not")
 	assert.NotNil(t, err, "No error when expected")
 
-	httpmock.RegisterResponder("GET", "https://my.sda.local/metadata/datasets",
-		httpmock.NewStringResponder(200, `["dataset1", "dataset2"]`))
+	httpmock.RegisterResponder("GET", "https://my.sda.local/datasets",
+		httpmock.NewStringResponder(200, `{"datasets": ["dataset1", "dataset2"], 
+		"nextPageToken": null}`))
 	sda, err = NewSDAfs(&c)
-
-	assert.NotNil(t, sda, "Did not get a sda when we should")
 	assert.Nil(t, err, "Unexpected error")
+	assert.NotNil(t, sda, "Did not get a sda when we should")
 
 	assert.NotNil(t, sda.inodes, "inodes in sda is nil")
 	assert.Equal(t, 3, len(sda.inodes), "inodes in sda is unexpected length")
@@ -144,53 +145,55 @@ func TestDatasetLoad(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
-	httpmock.RegisterResponder("GET", "https://my.sda.local/metadata/datasets",
-		httpmock.NewStringResponder(200, `["dataset1", "dataset2", "dataset3"]`))
+	httpmock.RegisterResponder("GET", "https://my.sda.local/datasets",
+		httpmock.NewStringResponder(200, `{"datasets": ["dataset1", "dataset2", "dataset3"],
+		"nextPageToken": null}`))
 
 	c := Conf{CredentialsFile: "test.ini",
 		RootURL:    "https://my.sda.local/",
 		HTTPClient: http.DefaultClient}
 
 	sda, err := NewSDAfs(&c)
+	assert.Nil(t, err, "Unexpected error")
+	assert.NotNil(t, sda.datasets, "No datasets although no error")
 	assert.Equal(t, []string{"dataset1", "dataset2", "dataset3"}, sda.datasets)
 
-	assert.Nil(t, err, "Unexpected error")
 	assert.NotNil(t, sda, "Did not get a sda when we should")
 
 	assert.NotNil(t, sda.inodes, "inodes in sda is nil")
 	assert.Equal(t, 4, len(sda.inodes), "inodes in sda is unexpected length")
 
 	httpmock.RegisterResponder("GET",
-		"https://my.sda.local/metadata/datasets/dataset1/files",
-		httpmock.NewStringResponder(200, `[]`))
+		"https://my.sda.local/datasets/dataset1/files",
+		httpmock.NewStringResponder(200, `{"files": [], "nextPageToken":null}`))
 
 	// NB: inodes is a map, not an array
 	err = sda.checkLoaded(sda.inodes[2])
 	assert.Nil(t, err, "Unexpected error")
 
 	httpmock.RegisterResponder("GET",
-		"https://my.sda.local/metadata/datasets/dataset2/files",
+		"https://my.sda.local/datasets/dataset2/files",
 		httpmock.NewStringResponder(500, `[]`))
 	err = sda.checkLoaded(sda.inodes[3])
 	assert.NotNil(t, err, "Unexpected lack of error")
 
 	httpmock.RegisterResponder("GET",
-		"https://my.sda.local/metadata/datasets/dataset3/files",
-		httpmock.NewStringResponder(200, `[
+		"https://my.sda.local/datasets/dataset3/files",
+		httpmock.NewStringResponder(200, `{"files": [
 		{ "fileId": "1", 
 			"filePath":"/file1",
-			"fileSize": 14000
+			"size": 14000
 		}, 
 		{ "fileId": "2", 
 			"filePath":"/dir1/file2",
-			"fileSize": 1000
+			"size": 1000
 		},
 		{ "fileId": "3", 
 			"filePath":"/dir1/file3",
-			"fileSize": 1000
+			"size": 1000
 		}
 
-			]`))
+			], "nextPageToken": null}`))
 	err = sda.checkLoaded(sda.inodes[4])
 	assert.Nil(t, err, "Unexpected error")
 	assert.Equal(t, 8, len(sda.inodes), "inodes in sda is unexpected length")
@@ -245,7 +248,7 @@ func TestSessionHandling(t *testing.T) {
 					Value: cookieval,
 				})
 				w.WriteHeader(200)
-				w.Write([]byte("[]\n")) // nolint:errcheck
+				w.Write([]byte(`{"datasets":[]}`)) // nolint:errcheck
 				return
 			}
 
@@ -263,7 +266,7 @@ func TestSessionHandling(t *testing.T) {
 			}
 
 			w.WriteHeader(200)
-			w.Write([]byte("[]\n")) // nolint:errcheck
+			w.Write([]byte(`{"datasets":[]}`)) // nolint:errcheck
 		})
 
 	go http.Serve(listener, nil) // nolint:errcheck
