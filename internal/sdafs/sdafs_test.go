@@ -167,6 +167,10 @@ func TestDatasetLoad(t *testing.T) {
 		"https://my.sda.local/datasets/dataset1/files",
 		httpmock.NewStringResponder(200, `{"files": [], "nextPageToken":null}`))
 
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset1",
+		httpmock.NewStringResponder(200, `{"files": 0, "size":0, "date":"2026-06-30T14:06:58Z"}`))
+
 	// NB: inodes is a map, not an array
 	err = sda.checkLoaded(sda.inodes[2])
 	assert.Nil(t, err, "Unexpected error")
@@ -194,6 +198,11 @@ func TestDatasetLoad(t *testing.T) {
 		}
 
 			], "nextPageToken": null}`))
+
+	httpmock.RegisterResponder("GET",
+		"https://my.sda.local/datasets/dataset3",
+		httpmock.NewStringResponder(200, `{"files": 3, "size":16000, "date":"2026-06-30T14:06:58Z"}`))
+
 	err = sda.checkLoaded(sda.inodes[4])
 	assert.Nil(t, err, "Unexpected error")
 	assert.Equal(t, 8, len(sda.inodes), "inodes in sda is unexpected length")
