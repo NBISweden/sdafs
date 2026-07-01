@@ -300,13 +300,17 @@ func (s *SDAfs) readToken() error {
 	return fmt.Errorf("no access token found in %s", s.conf.CredentialsFile)
 }
 
-func (s *SDAfs) doRequest(relPath, method string) (*http.Response, error) {
+func (s *SDAfs) doRequest(relPath, method string, extras ...string) (*http.Response, error) {
 
 	reqURL, err := url.JoinPath(s.conf.RootURL, relPath)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"couldn't make full URL from root %s relative %s: %v",
 			s.conf.RootURL, relPath, err)
+	}
+
+	for _, adder := range extras {
+		reqURL = reqURL + adder
 	}
 
 	req, err := http.NewRequest(method, reqURL, nil)
@@ -377,12 +381,13 @@ func (s *SDAfs) getDatasets() error {
 	for {
 
 		reqURL := "/datasets"
+		tokenArg := ""
 
 		if len(ds.NextPageToken) != 0 {
-			reqURL = fmt.Sprintf("%s?pageToken=%s", reqURL, ds.NextPageToken)
+			tokenArg = fmt.Sprintf("?pageToken=%s", ds.NextPageToken)
 		}
 
-		r, err := s.doRequest(reqURL, "GET")
+		r, err := s.doRequest(reqURL, "GET", tokenArg)
 		if err != nil {
 			return fmt.Errorf(
 				"error while making dataset request: %v",
@@ -584,12 +589,12 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 	for {
 		reqURL := fmt.Sprintf("/datasets/%s/files", datasetName)
 
+		tokenArg := ""
 		if len(fs.NextPageToken) != 0 {
-			reqURL = fmt.Sprintf("%s?pageToken=%s", reqURL, fs.NextPageToken)
-
+			tokenArg = fmt.Sprintf("?pageToken=%s", fs.NextPageToken)
 		}
 
-		r, err := s.doRequest(reqURL, "GET")
+		r, err := s.doRequest(reqURL, "GET", tokenArg)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"error while making dataset request: %v",
