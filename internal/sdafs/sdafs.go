@@ -532,13 +532,12 @@ func (s *SDAfs) getDatasetTimestamp(datasetName string) (time.Time, error) {
 	datasetInfo := datasetInfoResponse{}
 
 	r, err := s.doRequest(reqURL, "GET")
-	defer r.Body.Close() //nolint:errcheck
-
 	if err != nil {
 		return t, fmt.Errorf(
 			"error while making dataset info request: %v",
 			err)
 	}
+	defer r.Body.Close() //nolint:errcheck
 
 	if r.StatusCode != http.StatusOK {
 		return t, fmt.Errorf(
