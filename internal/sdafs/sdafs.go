@@ -1275,13 +1275,13 @@ func (s *SDAfs) getHeaderReader(i *inode) (io.ReadSeeker, error) {
 	}
 
 	r, err := s.doRequest(headerURL, "GET")
-	defer r.Body.Close() //nolint:errcheck
-
 	if err != nil {
 		return nil, fmt.Errorf(
 			"error while making header request: %w",
 			err)
 	}
+
+	defer r.Body.Close() //nolint:errcheck
 
 	if r.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf(
