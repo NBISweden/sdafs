@@ -590,13 +590,17 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 		}
 
 		r, err := s.doRequest(reqURL, "GET")
-		defer r.Body.Close() //nolint:errcheck
-
 		if err != nil {
 			return nil, fmt.Errorf(
 				"error while making dataset request: %v",
 				err)
 		}
+
+		if r == nil || r.Body == nil {
+			return nil, fmt.Errorf("error while making dataset request: empty response")
+		}
+
+		defer r.Body.Close() //nolint:errcheck
 
 		if r.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf(
