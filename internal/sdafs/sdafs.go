@@ -1228,7 +1228,7 @@ func (s *SDAfs) OpenFile(
 
 	var inodeReader io.ReadSeekCloser
 
-	fullReader, err := httpreader.SeekableMultiReader(headerReader, contentsReader)
+	combinedReader, err := httpreader.SeekableMultiReader(headerReader, contentsReader)
 
 	if err != nil {
 		slog.Error("OpenFile failed - SeekableMultiReader error",
@@ -1239,7 +1239,7 @@ func (s *SDAfs) OpenFile(
 		return EIO
 	}
 
-	inodeReader, err = streaming.NewCrypt4GHReader(fullReader, s.privateC4GHkey, nil)
+	inodeReader, err = streaming.NewCrypt4GHReader(combinedReader, s.privateC4GHkey, nil)
 
 	if err != nil {
 
