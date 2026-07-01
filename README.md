@@ -21,13 +21,13 @@ modern system providing the FUSE stack (i.e. `fusermount3`).
 
 ## Version selection
 
-There currently exists two versions of sdafs, corresponding to different
+There currently exist two versions of sdafs, corresponding to different
 versions of the download service for the sensitive data archive.
 
 Version 1 is legacy and receives needed fixes only. Version 2 is considered
 under development and welcomes suggestions.
 
-To determine which version you need, you can see if your download service offer
+To determine which version you need, you can see whether your download service offers
 a `/service-info` (e.g.
 [https://download.bp.nbis.se/service-info](https://download.bp.nbis.se/service-info)).
 If that works and gives you something about "SDA Download", the service you
