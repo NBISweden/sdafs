@@ -374,16 +374,16 @@ func TestDoMount(t *testing.T) {
 func stringInArgsFile(lookFor string) (bool, error) {
 	f, err := os.Open("./sdafsargs")
 	if err != nil {
-		return false, fmt.Errorf("unexpected error opening argument file after capability: %v", err)
+		return false, fmt.Errorf("unexpected error opening argument file after capability: %w", err)
 	}
 	s, err := io.ReadAll(f)
 	if err != nil {
-		return false, fmt.Errorf("unexpected error reading argument file after capability: %v", err)
+		return false, fmt.Errorf("unexpected error reading argument file after capability: %w", err)
 	}
 
 	err = f.Close()
 	if err != nil {
-		return false, fmt.Errorf("unexpected error closing argument file after capability: %v", err)
+		return false, fmt.Errorf("unexpected error closing argument file after capability: %w", err)
 	}
 
 	return bytes.Contains(s, []byte(lookFor)), nil

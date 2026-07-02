@@ -165,7 +165,7 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 	req, err := http.NewRequest("GET", useURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"couldn't make request for %s: %v",
+			"couldn't make request for %s: %w",
 			r.fileURL, err)
 	}
 
@@ -187,7 +187,7 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 	resp, err := r.conf.Client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"error while making request for %s: %v",
+			"error while making request for %s: %w",
 			r.fileURL, err)
 	}
 	duration := time.Since(beforeRequest)
@@ -212,7 +212,7 @@ func (r *HTTPReader) doFetch(rangeSpec string) ([]byte, error) {
 		if err != nil {
 			retErr = fmt.Errorf(
 				"unexpected status code for request for %s: %d "+
-					"(no more information, got %v while trying to read)",
+					"(no more information, got %w while trying to read)",
 				r.fileURL, resp.StatusCode, err)
 		}
 

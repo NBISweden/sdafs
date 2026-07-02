@@ -31,7 +31,7 @@ func SeekableMultiReader(readers ...io.Reader) (io.ReadSeeker, error) {
 
 		size, err := seeker.Seek(0, io.SeekEnd)
 		if err != nil {
-			return nil, fmt.Errorf("size determination failed for reader %d to SeekableMultiReader: %v", i, err)
+			return nil, fmt.Errorf("size determination failed for reader %d to SeekableMultiReader: %w", i, err)
 		}
 
 		sizes[i] = size
@@ -85,7 +85,7 @@ func (r *seekableMultiReader) Read(dst []byte) (int, error) {
 
 		_, err := seekable.Seek(r.currentOffset-readerStartAt, 0)
 		if err != nil {
-			return 0, fmt.Errorf("unexpected error while seeking: %v", err)
+			return 0, fmt.Errorf("unexpected error while seeking: %w", err)
 		}
 
 		n, err := seekable.Read(dst)
