@@ -38,7 +38,7 @@ func writeToken(d *Driver, v *volumeInfo) error {
 		return nil
 	}
 
-	return fmt.Errorf("token writing failed: %v", err)
+	return fmt.Errorf("token writing failed: %w", err)
 }
 
 func (d *Driver) writeExtraCA(v *volumeInfo) error {
@@ -55,7 +55,7 @@ func (d *Driver) writeExtraCA(v *volumeInfo) error {
 		return nil
 	}
 
-	return fmt.Errorf("extra CA writing failed: %v", err)
+	return fmt.Errorf("extra CA writing failed: %w", err)
 }
 
 func writeDataToFile(d *Driver, path string, data []byte) error {
@@ -63,7 +63,7 @@ func writeDataToFile(d *Driver, path string, data []byte) error {
 
 	if err != nil {
 		return fmt.Errorf("data writing failed; couldn't create "+
-			"temporary file: %v", err)
+			"temporary file: %w", err)
 	}
 
 	// os.CreateTemp now sets 0o600 but let's be explicit about it for clarity
@@ -71,7 +71,7 @@ func writeDataToFile(d *Driver, path string, data []byte) error {
 	if err := os.Chmod(f.Name(), 0o600); err != nil {
 		f.Close() // nolint:errcheck
 		return fmt.Errorf("data writing failed; couldn't set secure "+
-			"permissions on temporary file: %v", err)
+			"permissions on temporary file: %w", err)
 	}
 
 	written := 0
@@ -79,7 +79,7 @@ func writeDataToFile(d *Driver, path string, data []byte) error {
 		n, err := f.Write(data[written:])
 		if err != nil {
 			return fmt.Errorf("data writing failed; couldn't write "+
-				"temporary file contents: %v", err)
+				"temporary file contents: %w", err)
 		}
 		written += n
 	}
@@ -87,13 +87,13 @@ func writeDataToFile(d *Driver, path string, data []byte) error {
 	err = f.Close()
 	if err != nil {
 		return fmt.Errorf("data writing failed; error when closing "+
-			"temporary file: %v", err)
+			"temporary file: %w", err)
 	}
 
 	err = os.Rename(f.Name(), path)
 	if err != nil {
 		return fmt.Errorf("data writing failed; couldn't rename "+
-			"temporary file to proper name: %v", err)
+			"temporary file to proper name: %w", err)
 	}
 	return nil
 }
@@ -177,7 +177,7 @@ func doMount(d *Driver, v *volumeInfo) error {
 
 	err := d.ensureTargetDir(v)
 	if err != nil {
-		return fmt.Errorf("error while ensuring mount target %s existed: %v", v.path, err)
+		return fmt.Errorf("error while ensuring mount target %s existed: %w", v.path, err)
 	}
 
 	// We should try to unmount if asked to
@@ -185,33 +185,33 @@ func doMount(d *Driver, v *volumeInfo) error {
 
 	errPipe, err := c.StderrPipe()
 	if err != nil {
-		return fmt.Errorf("couldn't make stderr pipe for sdafs: %v", err)
+		return fmt.Errorf("couldn't make stderr pipe for sdafs: %w", err)
 	}
 
 	outPipe, err := c.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("couldn't make stdout pipe for sdafs: %v", err)
+		return fmt.Errorf("couldn't make stdout pipe for sdafs: %w", err)
 	}
 
 	err = c.Start()
 	if err != nil {
-		return fmt.Errorf("couldn't start sdafs: %v", err)
+		return fmt.Errorf("couldn't start sdafs: %w", err)
 	}
 
 	errorMsg, err := io.ReadAll(errPipe)
 	if err != nil {
-		return fmt.Errorf("couldn't read stderr from sdafs run: %v", err)
+		return fmt.Errorf("couldn't read stderr from sdafs run: %w", err)
 	}
 	outMsg, err := io.ReadAll(outPipe)
 	if err != nil {
-		return fmt.Errorf("couldn't read stdout from sdafs run: %v", err)
+		return fmt.Errorf("couldn't read stdout from sdafs run: %w", err)
 	}
 
 	err = c.Wait()
 	if err != nil {
 		klog.V(10).Infof("Output (stdout) from broken sdafs run: %s", outMsg)
 		klog.V(10).Infof("Output (stderr) from broken sdafs run: %s", errorMsg)
-		return fmt.Errorf("error while running sdafs: %v", err)
+		return fmt.Errorf("error while running sdafs: %w", err)
 	}
 
 	waited := time.Duration(0)
@@ -278,14 +278,14 @@ func unmount(d *Driver, v *volumeInfo) error {
 		// Only fail if we have an actual mount point
 
 		klog.V(10).Infof("unmount of %s failed with %v, giving up", v.path, err)
-		return fmt.Errorf("unmount of %s failed: %v giving up", v.path, err)
+		return fmt.Errorf("unmount of %s failed: %w giving up", v.path, err)
 	}
 
 	v.attached = false
 
 	err = os.Remove(v.path)
 	if err != nil {
-		return fmt.Errorf("couldn't remove directory for mount %s: %v", v.path, err)
+		return fmt.Errorf("couldn't remove directory for mount %s: %w", v.path, err)
 	}
 
 	return nil

@@ -257,22 +257,22 @@ func getDirent(in []byte) (*sdafs.Dirent, []byte, error) {
 
 	_, err := binary.Decode(in[:8], binary.NativeEndian, &dirent.ino)
 	if err != nil {
-		return nil, in, fmt.Errorf("couldn't parse direntry ino: %v", err)
+		return nil, in, fmt.Errorf("couldn't parse direntry ino: %w", err)
 	}
 
 	_, err = binary.Decode(in[8:16], binary.NativeEndian, &dirent.off)
 	if err != nil {
-		return nil, in, fmt.Errorf("couldn't parse direntry off: %v", err)
+		return nil, in, fmt.Errorf("couldn't parse direntry off: %w", err)
 	}
 
 	_, err = binary.Decode(in[16:20], binary.NativeEndian, &dirent.namelen)
 	if err != nil {
-		return nil, in, fmt.Errorf("couldn't parse direntry namelen: %v", err)
+		return nil, in, fmt.Errorf("couldn't parse direntry namelen: %w", err)
 	}
 
 	_, err = binary.Decode(in[20:24], binary.NativeEndian, &dirent.type_)
 	if err != nil {
-		return nil, in, fmt.Errorf("couldn't parse direntry type: %v", err)
+		return nil, in, fmt.Errorf("couldn't parse direntry type: %w", err)
 	}
 
 	if len(in) < 24+int(dirent.namelen) {

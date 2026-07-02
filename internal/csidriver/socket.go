@@ -47,7 +47,7 @@ func checkSocket(s *string) (bool, error) {
 
 	err = os.Remove(address)
 	if err != nil {
-		return false, fmt.Errorf("couldn't remove stale endpoint %s: %v", address, err)
+		return false, fmt.Errorf("couldn't remove stale endpoint %s: %w", address, err)
 	}
 
 	return true, nil

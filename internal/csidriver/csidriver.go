@@ -136,12 +136,12 @@ func (d *Driver) registerKubelet() error {
 	listener, err := net.Listen(network, address)
 
 	if err != nil {
-		return fmt.Errorf("error while setting up listen for grpc: %v", err)
+		return fmt.Errorf("error while setting up listen for grpc: %w", err)
 	}
 
 	err = d.fixSocketPerms(network, address)
 	if err != nil {
-		return fmt.Errorf("error while making socket accessible: %v", err)
+		return fmt.Errorf("error while making socket accessible: %w", err)
 	}
 
 	pluginregistration.RegisterRegistrationServer(csiServer, d)
@@ -175,7 +175,7 @@ func NewDriver(config *CSIConfig) (*Driver, error) {
 		}
 
 		if err != nil {
-			return nil, fmt.Errorf("problem with socket path %s: %v",
+			return nil, fmt.Errorf("problem with socket path %s: %w",
 				*path, err)
 		}
 	}
@@ -183,12 +183,12 @@ func NewDriver(config *CSIConfig) (*Driver, error) {
 	currentUser, err := user.Current()
 
 	if err != nil {
-		return nil, fmt.Errorf("don't even know who I am: %v", err)
+		return nil, fmt.Errorf("don't even know who I am: %w", err)
 	}
 
 	uid, err := strconv.Atoi(currentUser.Uid)
 	if err != nil {
-		return nil, fmt.Errorf("converting Uid string %s failed: %v",
+		return nil, fmt.Errorf("converting Uid string %s failed: %w",
 			currentUser.Uid, err)
 	}
 
@@ -252,7 +252,7 @@ func (d *Driver) fixSocketPerms(network, address string) error {
 	// Full world access requested and should be acted on
 	err := os.Chmod(address, 0o0777)
 	if err != nil {
-		return fmt.Errorf("can't make socket accessible: %v", err)
+		return fmt.Errorf("can't make socket accessible: %w", err)
 	}
 
 	return nil
@@ -268,12 +268,12 @@ func (d *Driver) Run() error {
 	listener, err := net.Listen(network, address)
 
 	if err != nil {
-		return fmt.Errorf("error while setting up listen for grpc: %v", err)
+		return fmt.Errorf("error while setting up listen for grpc: %w", err)
 	}
 
 	err = d.fixSocketPerms(network, address)
 	if err != nil {
-		return fmt.Errorf("error while fixing sockets permissions: %v", err)
+		return fmt.Errorf("error while fixing sockets permissions: %w", err)
 	}
 
 	// Close (remove) when we're done
@@ -284,7 +284,7 @@ func (d *Driver) Run() error {
 
 	err = d.registerKubelet()
 	if err != nil {
-		return fmt.Errorf("error while registering with kubelet: %v", err)
+		return fmt.Errorf("error while registering with kubelet: %w", err)
 	}
 
 	klog.V(4).Infof("RegisterIdentityServer")
@@ -306,7 +306,7 @@ func (d *Driver) Run() error {
 	err = d.server.Serve(listener)
 	if err != nil {
 		klog.Errorf("Serving stopped with error %v", err)
-		return fmt.Errorf("serving failed: %v", err)
+		return fmt.Errorf("serving failed: %w", err)
 	}
 
 	return nil

@@ -284,7 +284,7 @@ func (s *SDAfs) readToken() error {
 	f, err := ini.Load(s.conf.CredentialsFile)
 
 	if err != nil {
-		return fmt.Errorf("error while opening credentials file %s: %v",
+		return fmt.Errorf("error while opening credentials file %s: %w",
 			s.conf.CredentialsFile,
 			err)
 	}
@@ -305,7 +305,7 @@ func (s *SDAfs) doRequest(relPath, method string, extras ...string) (*http.Respo
 	reqURL, err := url.JoinPath(s.conf.RootURL, relPath)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"couldn't make full URL from root %s relative %s: %v",
+			"couldn't make full URL from root %s relative %s: %w",
 			s.conf.RootURL, relPath, err)
 	}
 
@@ -316,7 +316,7 @@ func (s *SDAfs) doRequest(relPath, method string, extras ...string) (*http.Respo
 	req, err := http.NewRequest(method, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"couldn't make request for %s: %v",
+			"couldn't make request for %s: %w",
 			reqURL, err)
 	}
 
@@ -391,7 +391,7 @@ func (s *SDAfs) getDatasets() error {
 		r, err := s.doRequest(reqURL, "GET", tokenArg)
 		if err != nil {
 			return fmt.Errorf(
-				"error while making dataset request: %v",
+				"error while making dataset request: %w",
 				err)
 		}
 		if r == nil {
@@ -412,7 +412,7 @@ func (s *SDAfs) getDatasets() error {
 			r.Body.Close() //nolint:errcheck
 
 			return fmt.Errorf(
-				"error while reading dataset response: %v",
+				"error while reading dataset response: %w",
 				err)
 		}
 
@@ -421,7 +421,7 @@ func (s *SDAfs) getDatasets() error {
 			r.Body.Close() //nolint:errcheck
 
 			return fmt.Errorf(
-				"error while doing unmarshal of dataset list %s: %v",
+				"error while doing unmarshal of dataset list %s: %w",
 				string(text), err)
 		}
 
@@ -464,13 +464,13 @@ func NewSDAfs(conf *Conf) (*SDAfs, error) {
 
 	err := n.setup()
 	if err != nil {
-		return nil, fmt.Errorf("setup failed: %v", err)
+		return nil, fmt.Errorf("setup failed: %w", err)
 	}
 
 	err = n.VerifyCredentials()
 
 	if err != nil {
-		return nil, fmt.Errorf("error while verifying credentials: %v", err)
+		return nil, fmt.Errorf("error while verifying credentials: %w", err)
 	}
 
 	go n.checkConnectionLoop()
@@ -545,7 +545,7 @@ func (s *SDAfs) getDatasetTimestamp(datasetName string) (time.Time, error) {
 	r, err := s.doRequest(reqURL, "GET")
 	if err != nil {
 		return t, fmt.Errorf(
-			"error while making dataset info request: %v",
+			"error while making dataset info request: %w",
 			err)
 	}
 	defer r.Body.Close() //nolint:errcheck
@@ -559,21 +559,21 @@ func (s *SDAfs) getDatasetTimestamp(datasetName string) (time.Time, error) {
 	text, err := io.ReadAll(r.Body)
 	if err != nil {
 		return t, fmt.Errorf(
-			"error while reading dataset info response: %v",
+			"error while reading dataset info response: %w",
 			err)
 	}
 
 	err = json.Unmarshal(text, &datasetInfo)
 	if err != nil {
 		return t, fmt.Errorf(
-			"error while doing unmarshal of dataset info %v: %v",
+			"error while doing unmarshal of dataset info %v: %w",
 			text, err)
 	}
 
 	t, err = time.Parse(time.RFC3339, datasetInfo.Date)
 	if err != nil {
 		return t, fmt.Errorf(
-			"error parsing dataset timestamp: %v",
+			"error parsing dataset timestamp: %w",
 			err)
 	}
 
@@ -604,7 +604,7 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 		r, err := s.doRequest(reqURL, "GET", tokenArg)
 		if err != nil {
 			return nil, fmt.Errorf(
-				"error while making dataset request: %v",
+				"error while making dataset request: %w",
 				err)
 		}
 
@@ -625,7 +625,7 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 			r.Body.Close() //nolint:errcheck
 
 			return nil, fmt.Errorf(
-				"error while reading dataset content response: %v",
+				"error while reading dataset content response: %w",
 				err)
 		}
 
@@ -634,7 +634,7 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 			r.Body.Close() //nolint:errcheck
 
 			return nil, fmt.Errorf(
-				"error while doing unmarshal of dataset contents %v: %v",
+				"error while doing unmarshal of dataset contents %v: %w",
 				text, err)
 		}
 
@@ -716,7 +716,7 @@ func (s *SDAfs) loadDataset(dataSetName string) error {
 
 	contents, err := s.getDatasetContents(dataSetName)
 	if err != nil {
-		return fmt.Errorf("error while getting contents for %s: %v",
+		return fmt.Errorf("error while getting contents for %s: %w",
 			dataSetName, err)
 	}
 
@@ -922,7 +922,7 @@ func (s *SDAfs) setup() error {
 	// Always bring in system CAs
 	certPool, err := x509.SystemCertPool()
 	if err != nil {
-		return fmt.Errorf("error while picking up system CA pool: %v", err)
+		return fmt.Errorf("error while picking up system CA pool: %w", err)
 	}
 
 	tlsConfig := &tls.Config{RootCAs: certPool}
@@ -932,7 +932,7 @@ func (s *SDAfs) setup() error {
 		caFile, err := os.Open(s.conf.ExtraCAFile)
 
 		if err != nil {
-			return fmt.Errorf("error while opening extra CA file %s: %v",
+			return fmt.Errorf("error while opening extra CA file %s: %w",
 				s.conf.ExtraCAFile,
 				err)
 		}
@@ -941,7 +941,7 @@ func (s *SDAfs) setup() error {
 
 		pems, err := io.ReadAll(caFile)
 		if err != nil {
-			return fmt.Errorf("error while reading extra CA file %s: %v",
+			return fmt.Errorf("error while reading extra CA file %s: %w",
 				s.conf.ExtraCAFile,
 				err)
 		}
@@ -972,7 +972,7 @@ func (s *SDAfs) setup() error {
 			})
 
 		if err != nil {
-			return fmt.Errorf("unexpected error setting up cookiejar: %v",
+			return fmt.Errorf("unexpected error setting up cookiejar: %w",
 				err)
 		}
 
@@ -1000,7 +1000,7 @@ func (s *SDAfs) setup() error {
 	publicKey, privateKey, err := keys.GenerateKeyPair()
 
 	if err != nil {
-		return fmt.Errorf("unexpected error while generating c4gh keypair: %v",
+		return fmt.Errorf("unexpected error while generating c4gh keypair: %w",
 			err)
 	}
 	s.privateC4GHkey = privateKey
@@ -1009,7 +1009,7 @@ func (s *SDAfs) setup() error {
 	err = keys.WriteCrypt4GHX25519PublicKey(w, publicKey)
 
 	if err != nil {
-		return fmt.Errorf("error when writing public key: %v", err)
+		return fmt.Errorf("error when writing public key: %w", err)
 	}
 
 	publicKeyEncoded := base64.StdEncoding.EncodeToString(w.Bytes())
@@ -1037,13 +1037,13 @@ func (s *SDAfs) VerifyCredentials() error {
 
 	err := s.readToken()
 	if err != nil {
-		return fmt.Errorf("error while getting token: %v",
+		return fmt.Errorf("error while getting token: %w",
 			err)
 	}
 
 	err = s.getDatasets()
 	if err != nil {
-		return fmt.Errorf("error while getting datasets: %v",
+		return fmt.Errorf("error while getting datasets: %w",
 			err)
 	}
 
@@ -1119,7 +1119,7 @@ func (s *SDAfs) checkLoaded(i *inode) error {
 		slog.Error("Couldn't load dataset",
 			"dataset", i.dataset,
 			"error", err)
-		return fmt.Errorf("couldn't load dataset %s: %v", i.dataset, err)
+		return fmt.Errorf("couldn't load dataset %s: %w", i.dataset, err)
 	}
 	s.maplock.Lock()
 	i.loaded = true
@@ -1290,7 +1290,7 @@ func (s *SDAfs) OpenFile(
 	if err != nil {
 		slog.Debug("OpenFile id acquisition failed",
 			"error", err)
-		return fmt.Errorf("error while getting new ID: %v", err)
+		return fmt.Errorf("error while getting new ID: %w", err)
 	}
 
 	s.handles[id] = inodeReader
@@ -1367,7 +1367,7 @@ func getRandomID() (uint64, error) {
 	got, err := rand.Read(b)
 
 	if err != nil {
-		return 0, fmt.Errorf("error while reading random number: %v", err)
+		return 0, fmt.Errorf("error while reading random number: %w", err)
 	}
 
 	if got != 8 {
@@ -1388,7 +1388,7 @@ func (s *SDAfs) getNewIDLocked() (HandleID, error) {
 	for {
 		newID, err := getRandomID()
 		if err != nil {
-			return 0, fmt.Errorf("couldn't make random id: %v", err)
+			return 0, fmt.Errorf("couldn't make random id: %w", err)
 		}
 
 		id := HandleID(newID)
