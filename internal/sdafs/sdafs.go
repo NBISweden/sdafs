@@ -370,7 +370,7 @@ func (s *SDAfs) extractCookies(r *http.Response) {
 
 type datasetListResponse struct {
 	Datasets      []string `json:"datasets"`
-	NextPageToken string   `json:"nextPageToken"`
+	NextPageToken *string  `json:"nextPageToken"`
 }
 
 func (s *SDAfs) getDatasets() error {
@@ -383,8 +383,9 @@ func (s *SDAfs) getDatasets() error {
 		reqURL := "/datasets"
 		tokenArg := ""
 
-		if len(ds.NextPageToken) != 0 {
-			tokenArg = fmt.Sprintf("?pageToken=%s", ds.NextPageToken)
+		if ds.NextPageToken != nil && len(*ds.NextPageToken) != 0 {
+			tokenArg = fmt.Sprintf("?pageToken=%s",
+				url.QueryEscape(*ds.NextPageToken))
 		}
 
 		r, err := s.doRequest(reqURL, "GET", tokenArg)
@@ -396,7 +397,6 @@ func (s *SDAfs) getDatasets() error {
 		if r == nil {
 			return fmt.Errorf("error while making dataset request: nil response")
 		}
-		defer r.Body.Close() //nolint:errcheck
 
 		if r.StatusCode != http.StatusOK {
 			return fmt.Errorf(
@@ -409,6 +409,8 @@ func (s *SDAfs) getDatasets() error {
 
 		text, err := io.ReadAll(r.Body)
 		if err != nil {
+			r.Body.Close() //nolint:errcheck
+
 			return fmt.Errorf(
 				"error while reading dataset response: %v",
 				err)
@@ -416,6 +418,8 @@ func (s *SDAfs) getDatasets() error {
 
 		err = json.Unmarshal(text, &ds)
 		if err != nil {
+			r.Body.Close() //nolint:errcheck
+
 			return fmt.Errorf(
 				"error while doing unmarshal of dataset list %s: %v",
 				string(text), err)
@@ -434,7 +438,9 @@ func (s *SDAfs) getDatasets() error {
 			}
 		}
 
-		if len(ds.NextPageToken) == 0 {
+		if ds.NextPageToken == nil || len(*ds.NextPageToken) == 0 {
+			r.Body.Close() //nolint:errcheck
+
 			return nil
 		}
 	}
@@ -520,7 +526,7 @@ func (s *SDAfs) checkConnectionLoop() {
 
 type fileListResponse struct {
 	Files         []datasetFile `json:"files"`
-	NextPageToken string        `json:"nextPageToken"`
+	NextPageToken *string       `json:"nextPageToken"`
 }
 
 type datasetInfoResponse struct {
@@ -590,8 +596,9 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 		reqURL := fmt.Sprintf("/datasets/%s/files", datasetName)
 
 		tokenArg := ""
-		if len(fs.NextPageToken) != 0 {
-			tokenArg = fmt.Sprintf("?pageToken=%s", fs.NextPageToken)
+		if fs.NextPageToken != nil && len(*fs.NextPageToken) != 0 {
+			tokenArg = fmt.Sprintf("?pageToken=%s",
+				url.QueryEscape(*fs.NextPageToken))
 		}
 
 		r, err := s.doRequest(reqURL, "GET", tokenArg)
@@ -605,9 +612,9 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 			return nil, fmt.Errorf("error while making dataset request: empty response")
 		}
 
-		defer r.Body.Close() //nolint:errcheck
-
 		if r.StatusCode != http.StatusOK {
+			r.Body.Close() //nolint:errcheck
+
 			return nil, fmt.Errorf(
 				"dataset request didn't return 200, we got %d",
 				r.StatusCode)
@@ -615,6 +622,8 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 
 		text, err := io.ReadAll(r.Body)
 		if err != nil {
+			r.Body.Close() //nolint:errcheck
+
 			return nil, fmt.Errorf(
 				"error while reading dataset content response: %v",
 				err)
@@ -622,6 +631,8 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 
 		err = json.Unmarshal(text, &fs)
 		if err != nil {
+			r.Body.Close() //nolint:errcheck
+
 			return nil, fmt.Errorf(
 				"error while doing unmarshal of dataset contents %v: %v",
 				text, err)
@@ -633,7 +644,9 @@ func (s *SDAfs) getDatasetContents(datasetName string) ([]datasetFile, error) {
 
 		contents = append(contents, fs.Files...)
 
-		if len(fs.NextPageToken) == 0 {
+		if fs.NextPageToken == nil || len(*fs.NextPageToken) == 0 {
+			r.Body.Close() //nolint:errcheck
+
 			return contents, nil
 		}
 	}
@@ -1196,6 +1209,12 @@ func (s *SDAfs) OpenFile(
 		return EINVAL
 	}
 
+	if len(in.downloadURL) == 0 {
+		slog.Info("Missing downloadURL in inode", "inode", op.Inode)
+
+		return EINVAL
+	}
+
 	contentsURL, err := url.JoinPath(s.conf.RootURL, in.downloadURL, "content")
 	if err != nil {
 		slog.Error("OpenFile failed - JoinPath error",
@@ -1214,8 +1233,14 @@ func (s *SDAfs) OpenFile(
 		return EIO
 	}
 
-	if in.header == nil {
-		in.header, err = s.getHeaderBytes(in)
+	// Headers are small enough that we cache them in the inodes for now,
+	// we canrevisit for some kind of expiring cache if needed
+	s.maplock.RLock()
+	header := in.header
+	s.maplock.RUnlock()
+
+	if header == nil {
+		header, err = s.getHeaderBytes(in)
 
 		if err != nil {
 			slog.Error("OpenFile failed - error while fetching header",
@@ -1223,6 +1248,10 @@ func (s *SDAfs) OpenFile(
 				"error", err)
 			return EIO
 		}
+
+		s.maplock.Lock()
+		in.header = header
+		s.maplock.Unlock()
 	}
 	headerReader := bytes.NewReader(in.header)
 
