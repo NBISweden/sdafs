@@ -164,8 +164,6 @@ func (s *cryptSuite) getEncryptedContents(req *http.Request) ([]byte, int, error
 			err)
 	}
 
-	// t.Logf("public key decoded from base64: %s", string(nobase))
-
 	public, err := keys.ReadPublicKey(bytes.NewBuffer(nobase))
 	if err != nil {
 		return nil, 0, fmt.Errorf("reading public key from header string (%s) failed: %w",
@@ -173,7 +171,6 @@ func (s *cryptSuite) getEncryptedContents(req *http.Request) ([]byte, int, error
 			err)
 	}
 
-	// t.Logf("public key is %v", public)
 	c4ghwriter, err := streaming.NewCrypt4GHWriter(buf, s.private, [][32]byte{public, s.public}, nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("newcrypt4ghwriter failed: %w", err)
@@ -189,7 +186,11 @@ func (s *cryptSuite) getEncryptedContents(req *http.Request) ([]byte, int, error
 			len(s.data))
 	}
 
-	c4ghwriter.Close()
+	err = c4ghwriter.Close()
+	if err != nil {
+		return nil, 0, fmt.Errorf("couldn't close c4gh writer: %w", err)
+	}
+
 	content := buf.Bytes()
 
 	headerBuffer := bytes.NewReader(bytes.Clone(content))
@@ -209,7 +210,7 @@ func (s *cryptSuite) encryptingResponder(req *http.Request) (*http.Response, err
 	// encrypting responder deals with the dynamic request that needs to respond
 	// for a requested
 	t := s.T()
-	t.Logf("handling request for contents: %s", req.URL.Path)
+
 	r := http.Response{}
 
 	content, headerLength, err := s.getEncryptedContents(req)
@@ -232,14 +233,10 @@ func (s *cryptSuite) encryptingResponder(req *http.Request) (*http.Response, err
 		contentEnd = len(content) - headerLength
 	}
 
-	t.Logf("Contents total is: %v", content)
-
 	if strings.HasSuffix(req.URL.Path, "/header") {
-		t.Logf("sending header %v", content[:headerLength])
 		r.Body = io.NopCloser(bytes.NewReader(content[:headerLength]))
 	} else {
-		t.Logf("sending content %v", content[headerLength+contentStart:headerLength+contentEnd])
-		t.Logf("Passing %v %v", contentStart, contentEnd)
+
 		r.Body = io.NopCloser(bytes.NewReader(content[headerLength+contentStart : headerLength+contentEnd]))
 	}
 
