@@ -39,3 +39,5 @@ misconfigurations:
     paths:
       - deploy/attacher.yaml
       - deploy/csi-sdafs.yaml
+vulnerabilities:
+  - id: GO-2026-5932
