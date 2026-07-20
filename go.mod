@@ -10,7 +10,7 @@ require (
 	github.com/jarcoal/httpmock v1.4.1
 	github.com/neicnordic/crypt4gh v1.15.0
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
-	github.com/sevlyar/go-daemon v0.1.6
+	github.com/sevlyar/go-daemon v0.1.7
 	github.com/stretchr/testify v1.11.1
 	github.com/tj/assert v0.0.3
 	github.com/winfsp/cgofuse v1.6.0
