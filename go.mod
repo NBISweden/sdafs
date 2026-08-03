@@ -3,7 +3,7 @@ module github.com/NBISweden/sdafs
 go 1.26.0
 
 require (
-	github.com/container-storage-interface/spec v1.12.0
+	github.com/container-storage-interface/spec v1.13.0
 	github.com/dgraph-io/ristretto/v2 v2.4.2
 	github.com/google/uuid v1.6.0
 	github.com/jacobsa/fuse v0.0.0-20260630194014-a124548f6da7
@@ -20,7 +20,7 @@ require (
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
 	gopkg.in/ini.v1 v1.67.3
 	k8s.io/klog/v2 v2.140.0
-	k8s.io/kubelet v0.36.2
+	k8s.io/kubelet v0.36.3
 )
 
 require (
