@@ -18,7 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Get fuse bindings
-        run: sudo apt update && sudo apt install --yes libfuse-dev  linux-libc-dev
+        run: "sudo apt update && \
+          sudo apt install --yes libfuse-dev  linux-libc-dev"
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -45,7 +46,9 @@ jobs:
           push: false
           tags: |
             ghcr.io/nbisweden/sdafs:latest
-          labels: |
-            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
-            org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-            org.opencontainers.image.revision=${{ github.sha }}
+          labels: "
+            org.opencontainers.image.source=\
+            ${{ github.event.repository.clone_url }}\n
+            org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')\n
+            org.opencontainers.image.revision=${{ github.sha }}\n
+            "

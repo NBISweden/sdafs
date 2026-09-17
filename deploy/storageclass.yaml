@@ -17,7 +17,8 @@ parameters:
   csi.storage.k8s.io/secret-namespace: "${pvc.namespace}"
   # It's also possible to specify the key of the secret designated above
   # will be used to provide the authentication token.
-  csi.storage.k8s.io/secret-name: "${pvc.annotations['sda.nbis.se/token-secret']}"
+  csi.storage.k8s.io/secret-name: "\
+    ${pvc.annotations['sda.nbis.se/token-secret']}"
   # Some of the options for sdafs are supported here
   # chunksize: "5120"
   # cachesize: "128"

@@ -1,0 +1,83 @@
+---
+
+replicas: 1
+
+resources:
+  attacher:
+    requests:
+      cpu: 0.01
+      memory: 128Mi
+    limits:
+      cpu: 0.1
+      memory: 1g
+  provisioner:
+    requests:
+      cpu: 0.01
+      memory: 128Mi
+    limits:
+      cpu: 0.1
+      memory: 1g
+  csisdafs:
+    requests:
+      cpu: 0.5
+      memory: 100Mi
+    limits:
+      cpu: 2
+      memory: 8Gi
+
+image:
+  repository: ghcr.io/nbisweden/sdafs
+  # Specify either tag or digest, if both are specified digest wins
+  # Chart publishing will fill in digest so specifying a tag requires
+  # setting digest to something false
+  #
+  digest: ""
+  tag: ""
+  pullPolicy: Always
+
+attacher:
+  image: registry.k8s.io/sig-storage/csi-attacher:v4.13.0
+  pullPolicy: Always
+
+provisioner:
+  image: registry.k8s.io/sig-storage/csi-provisioner:v6.3.0
+  pullPolicy: Always
+
+storageClass:
+  name: sdafs
+  parameters: |
+    # Possible parameters to set that csi-sdafs considers. Note that these are
+    # brought into the volume at creation time and thus replacing the
+    # StorageClass will not update existing volumes.
+    #
+    # PVC should point to a secret where we can get the token (you probably
+    # want to check the namespace of the PVC)
+    csi.storage.k8s.io/secret-namespace: "${pvc.namespace}"
+    # It's also possible to specify the key of the secret designated above
+    # will be used to provide the authentication token.
+    csi.storage.k8s.io/secret-name: "\
+      ${pvc.annotations['sda.nbis.se/token-secret']}"
+    # Some of the options for sdafs are supported here
+    # chunksize: "5120"
+    # cachesize: "128"
+    # maxretries: "20"
+    # rootURL: "..."
+    # extraca: |
+    #       -----BEGIN CERTIFICATE-----
+    #       MIICbjCCAfOgAwIBAgIQYvYybOXE42hcG2LdnC6dlTAKBggqhkjOPQQDAzB4MQsw
+    #       CQYDVQQGEwJFUzERMA8GA1UECgwIRk5NVC1SQ00xDjAMBgNVBAsMBUNlcmVzMRgw
+    #       FgYDVQRhDA9WQVRFUy1RMjgyNjAwNEoxLDAqBgNVBAMMI0FDIFJBSVogRk5NVC1S
+    #       Q00gU0VSVklET1JFUyBTRUdVUk9TMB4XDTE4MTIyMDA5MzczM1oXDTQzMTIyMDA5
+    #       MzczM1oweDELMAkGA1UEBhMCRVMxETAPBgNVBAoMCEZOTVQtUkNNMQ4wDAYDVQQL
+    #       DAVDZXJlczEYMBYGA1UEYQwPVkFURVMtUTI4MjYwMDRKMSwwKgYDVQQDDCNBQyBS
+    #       ...
+    #
+    #
+    # tokenkey: "token"
+    # owner: "40000"
+    # group: "60000"
+    #
+    # In more modern setups this is managed by Kubernetes delegating the
+    # permission handling to CSI (based on VOLUME_MOUNT_GROUP), if that happens,
+    # the group value provided here will be ignored.
+    #

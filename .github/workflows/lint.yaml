@@ -24,7 +24,8 @@ jobs:
 
     steps:
       - name: Get fuse bindings
-        run: sudo apt update && sudo apt install --yes libfuse-dev linux-libc-dev
+        run: "sudo apt update && \
+          sudo apt install --yes libfuse-dev linux-libc-dev"
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -35,9 +36,10 @@ jobs:
           persist-credentials: false
 
       - name: Super-linter
-        uses: super-linter/super-linter@4ce20838b8ab83717e78138c5b3a1407148e0918 # x-release-please-version
+        uses: super-linter/super-linter@4ce20838b8ab83717e78138c5b3a1407148e0918
         env:
           # To report GitHub Actions status checks
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VALIDATE_GO: false # Only go modules, which should cover enough
           VALIDATE_BIOME_FORMAT: false # Competes with prettier
+          VALIDATE_KUBERNETES_KUBECONFORM: false
