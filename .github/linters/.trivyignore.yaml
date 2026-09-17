@@ -21,11 +21,15 @@ misconfigurations:
     paths:
       - deploy/attacher.yaml
       - deploy/csi-sdafs.yaml
+      - charts/sdafs/templates/attacher.yaml
+      - charts/sdafs/templates/csi-sdafs.yaml
   # These are system services
   - id: AVD-KSV-0037
     paths:
       - deploy/attacher.yaml
       - deploy/csi-sdafs.yaml
+      - charts/sdafs/templates/attacher.yaml
+      - charts/sdafs/templates/csi-sdafs.yaml
   # Running as root required to access/create pod directories
   - id: AVD-KSV-0012
     paths:
@@ -34,10 +38,15 @@ misconfigurations:
   - id: AVD-KSV-0041
     paths:
       - deploy/attacher.yaml
+      - charts/sdafs/templates/attacher.yaml
   # Images not published in those registries for now
   - id: AVD-KSV-0125
     paths:
       - deploy/attacher.yaml
       - deploy/csi-sdafs.yaml
+  # Populated by github action
+  - id: AVD-KSV-0013
+    paths:
+      - charts/sdafs/templates/attacher.yaml
 vulnerabilities:
   - id: GO-2026-5932

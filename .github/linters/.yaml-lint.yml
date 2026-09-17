@@ -1,0 +1,10 @@
+---
+extends: default
+
+ignore:
+  - charts/sdafs/templates/
+  - charts/sdafs/templates/*.yaml
+  - github/workspace/charts/sdafs/templates/
+  - github/workspace/charts/sdafs/templates/*.yaml
+  - /github/workspace/charts/sdafs/templates/
+  - /github/workspace/charts/sdafs/templates/*.yaml

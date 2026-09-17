@@ -1,0 +1,12 @@
+---
+# StorageClass for SDA
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.storageClass.name }}
+provisioner: csi.sda.nbis.se
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: false
+parameters:
+{{ .Values.StorageClass.parameters | nindent 2 }}
