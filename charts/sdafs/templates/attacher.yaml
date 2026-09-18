@@ -102,11 +102,11 @@ spec:
               mountPath: /var/lib/kubelet/plugins/csi.sda.nbis.se
           resources:
             requests:
-              memory: "{{ .Values.attacher.requests.memory }}"
-              cpu: "{{ .Values.attacher.requests.cpu }}"
+              memory: "{{ .Values.resources.attacher.requests.memory }}"
+              cpu: "{{ .Values.resources.attacher.requests.cpu }}"
             limits:
-              memory: "{{ .Values.attacher.requests.memory }}"
-              cpu: "{{ .Values.attacher.requests.cpu }}"
+              memory: "{{ .Values.resources.attacher.requests.memory }}"
+              cpu: "{{ .Values.resources.attacher.requests.cpu }}"
               
           securityContext:
             runAsNonRoot: true
@@ -137,11 +137,11 @@ spec:
               mountPath: /var/lib/kubelet/plugins/csi.sda.nbis.se
           resources:
             requests:
-              memory: "{{ .Values.provisioner.requests.memory }}"
-              cpu: "{{ .Values.provisioner.requests.cpu }}"
+              memory: "{{ .Values.resources.provisioner.requests.memory }}"
+              cpu: "{{ .Values.resources.provisioner.requests.cpu }}"
             limits:
-              memory: "{{ .Values.provisioner.limits.memory }}"
-              cpu: "{{ .Values.provisioner.limits.cpu }}"
+              memory: "{{ .Values.resources.provisioner.limits.memory }}"
+              cpu: "{{ .Values.resources.provisioner.limits.cpu }}"
           securityContext:
             runAsNonRoot: true
             readOnlyRootFilesystem: true
