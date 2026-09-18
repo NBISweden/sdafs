@@ -9,14 +9,14 @@ resources:
       memory: 128Mi
     limits:
       cpu: 0.1
-      memory: 1g
+      memory: 1Gi
   provisioner:
     requests:
       cpu: 0.01
       memory: 128Mi
     limits:
       cpu: 0.1
-      memory: 1g
+      memory: 1Gi
   csisdafs:
     requests:
       cpu: 0.5
