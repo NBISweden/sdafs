@@ -9,4 +9,4 @@ reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
 allowVolumeExpansion: false
 parameters:
-{{ .Values.StorageClass.parameters | nindent 2 }}
+{{ .Values.storageClass.parameters | nindent 2 }}
