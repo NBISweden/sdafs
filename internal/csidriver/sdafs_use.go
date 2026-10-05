@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -30,6 +31,10 @@ func (d *Driver) getCAFilePath(v *volumeInfo) string {
 // writeToken is managed as a field to enable easier
 // testing
 func writeToken(d *Driver, v *volumeInfo) error {
+	if strings.Contains(v.ID, "/") || strings.Contains(v.ID, "..") {
+		return fmt.Errorf("bad volume id, risk for path traversal: %s", v.ID)
+	}
+
 	err := writeDataToFile(d,
 		d.getTokenFilePath(v),
 		[]byte("access_token = "+v.secret+"\n\n"))
