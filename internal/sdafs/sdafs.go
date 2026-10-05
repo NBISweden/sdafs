@@ -1137,7 +1137,7 @@ func (s *SDAfs) LookUpInode(
 	_ context.Context,
 	op *LookUpInodeOp) error {
 
-	parent, ok := s.inodes[op.Parent]
+	parent, ok := s.getInodeOK(op.Parent)
 	if !ok {
 		return ENOENT
 	}
