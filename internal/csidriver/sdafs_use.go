@@ -19,8 +19,10 @@ import (
 )
 
 func getVolumeIDHash(v *volumeInfo) string {
+	h := sha256.New()
+	h.Write([]byte(v.ID))
 
-	return fmt.Sprintf("%x", sha256.New().Sum([]byte(v.ID)))
+	return fmt.Sprintf("%x", h.Sum([]byte{}))
 }
 
 // Return a suitable path for a token

@@ -29,7 +29,7 @@ func TestGetCAFilePath(t *testing.T) {
 	v := volumeInfo{ID: "IDENTIFIER"}
 	tp := d.getCAFilePath(&v)
 
-	assert.Equal(t, "PATHSTART/extraca-4944454e544946494552e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", tp, "Unexpected path")
+	assert.Equal(t, "PATHSTART/extraca-fdaaf435aeb48d9df0acf01465292faeec12fdad3ecaee4546ae577c0bc762ad", tp, "Unexpected path")
 }
 
 func TestWriteExtraCA(t *testing.T) {
@@ -77,7 +77,7 @@ func TestGetTokenFilePath(t *testing.T) {
 	v := volumeInfo{ID: "IDENTIFIER"}
 	tp := d.getTokenFilePath(&v)
 
-	assert.Equal(t, "PATHSTART/token-4944454e544946494552e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", tp, "Unexpected path")
+	assert.Equal(t, "PATHSTART/token-fdaaf435aeb48d9df0acf01465292faeec12fdad3ecaee4546ae577c0bc762ad", tp, "Unexpected path")
 }
 
 func TestWriteToken(t *testing.T) {
