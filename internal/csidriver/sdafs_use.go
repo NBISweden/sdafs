@@ -1,6 +1,7 @@
 package csidriver
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -8,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -18,23 +18,26 @@ import (
 	"k8s.io/klog/v2"
 )
 
+func getVolumeIDHash(v *volumeInfo) string {
+
+	return fmt.Sprintf("%x", sha256.New().Sum([]byte(v.ID)))
+}
+
 // Return a suitable path for a token
 func (d *Driver) getTokenFilePath(v *volumeInfo) string {
-	return path.Join(*d.tokenDir, "token-"+v.ID)
+
+	return path.Join(*d.tokenDir,
+		"token-"+getVolumeIDHash(v))
 }
 
 // Return a suitable path for a CA
 func (d *Driver) getCAFilePath(v *volumeInfo) string {
-	return path.Join(*d.tokenDir, "extraca-"+v.ID)
+	return path.Join(*d.tokenDir, "extraca-"+getVolumeIDHash(v))
 }
 
 // writeToken is managed as a field to enable easier
 // testing
 func writeToken(d *Driver, v *volumeInfo) error {
-	if strings.Contains(v.ID, "/") || strings.Contains(v.ID, "..") {
-		return fmt.Errorf("bad volume id, risk for path traversal: %s", v.ID)
-	}
-
 	err := writeDataToFile(d,
 		d.getTokenFilePath(v),
 		[]byte("access_token = "+v.secret+"\n\n"))
