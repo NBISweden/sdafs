@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jacobsa/fuse v0.0.0-20260630194014-a124548f6da7
 	github.com/jarcoal/httpmock v1.4.2
-	github.com/neicnordic/crypt4gh v1.15.0
+	github.com/neicnordic/crypt4gh v1.15.2
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/sevlyar/go-daemon v0.1.7
 	github.com/stretchr/testify v1.12.1
@@ -20,7 +20,7 @@ require (
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/ini.v1 v1.67.3
 	k8s.io/klog/v2 v2.140.0
-	k8s.io/kubelet v0.37.0
+	k8s.io/kubelet v0.37.1
 )
 
 require (

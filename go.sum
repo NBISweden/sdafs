@@ -34,8 +34,8 @@ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/maxatome/go-testdeep v1.14.0 h1:rRlLv1+kI8eOI3OaBXZwb3O7xY3exRzdW5QyX48g9wI=
 github.com/maxatome/go-testdeep v1.14.0/go.mod h1:lPZc/HAcJMP92l7yI6TRz1aZN5URwUBUAfUNvrclaNM=
-github.com/neicnordic/crypt4gh v1.15.0 h1:as+O2Y2IwXAKJzSJX5RPE7PLTCtWkygdjIMk3N34YCo=
-github.com/neicnordic/crypt4gh v1.15.0/go.mod h1:4FYcQUA0mtdEosuktXaWw8IID2VYL8lKKHbSKxoI4g4=
+github.com/neicnordic/crypt4gh v1.15.2 h1:KGXhGiXVNUsaiDyxel9hhcm/mtsHnD4t6A08MhZAVS8=
+github.com/neicnordic/crypt4gh v1.15.2/go.mod h1:4FYcQUA0mtdEosuktXaWw8IID2VYL8lKKHbSKxoI4g4=
 github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 h1:onHthvaw9LFnH4t2DcNVpwGmV9E1BkGknEliJkfwQj0=
 github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58/go.mod h1:DXv8WO4yhMYhSNPKjeNKa5WY9YCIEBRbNzFFPJbWO6Y=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
@@ -85,5 +85,5 @@ gopkg.in/yaml.v3 v3.0.0-20200605160147-a5ece683394c/go.mod h1:K4uyk7z7BCEPqu6E+C
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 k8s.io/klog/v2 v2.140.0 h1:Tf+J3AH7xnUzZyVVXhTgGhEKnFqye14aadWv7bzXdzc=
 k8s.io/klog/v2 v2.140.0/go.mod h1:o+/RWfJ6PwpnFn7OyAG3QnO47BFsymfEfrz6XyYSSp0=
-k8s.io/kubelet v0.37.0 h1:VhaZanjlE5CkoAPAjKw0DH+Q0BYXVfYekZgzZDAJMMg=
-k8s.io/kubelet v0.37.0/go.mod h1:PHXfQuVqsTzFVqOeP67UUNv5Ajri+dLGoeaEnW6gGjE=
+k8s.io/kubelet v0.37.1 h1:Z4Hl7BpLQqkS05sjSbu49gSlIhBjvoERoJtDQhc2zhY=
+k8s.io/kubelet v0.37.1/go.mod h1:zqXRPLnFVI0PZduLxjAVK2GK/ymX/m7wlCiH0/BiEgk=
