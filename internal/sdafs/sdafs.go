@@ -1359,11 +1359,11 @@ func (s *SDAfs) ReleaseFileHandle(
 		return EINVAL
 	}
 
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
 	delete(s.handles, op.Handle)
 	s.maplock.Unlock()
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
 
 	err := r.reader.Close()
 
