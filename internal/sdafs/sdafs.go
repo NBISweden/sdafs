@@ -96,7 +96,7 @@ type SDAfs struct {
 	maplock sync.RWMutex
 
 	// handles is used to keep track of open "files"
-	handles map[HandleID]io.ReadSeekCloser
+	handles map[HandleID]handle
 
 	// extraHeader is an extra header we add on requests, we put cookies
 	// we should use there
@@ -109,6 +109,11 @@ type SDAfs struct {
 	// tokenLoadTime keeps track of when we last fetched the token from the
 	// credentials file, used to decide if we should reread
 	tokenLoadTime time.Time
+}
+
+type handle struct {
+	reader io.ReadSeekCloser
+	lock   sync.RWMutex
 }
 
 // Conf holds the configuration
@@ -265,7 +270,7 @@ func (s *SDAfs) initMaps() {
 	}
 
 	if s.handles == nil {
-		s.handles = make(map[HandleID]io.ReadSeekCloser)
+		s.handles = make(map[HandleID]handle)
 	}
 
 	if s.loading == nil {
@@ -1278,6 +1283,12 @@ func (s *SDAfs) OpenFile(
 		return EIO
 	}
 
+	if inodeReader == nil {
+		slog.Error("reader was nil unexpectedly",
+			"key", in.key)
+		return EIO
+	}
+
 	// Note: HTTPReader supports Close but doesn't really care for it so
 	// we don't go through the trouble of closing it at the end if we're doing
 	// crypt4gh
@@ -1293,7 +1304,7 @@ func (s *SDAfs) OpenFile(
 		return fmt.Errorf("error while getting new ID: %w", err)
 	}
 
-	s.handles[id] = inodeReader
+	s.handles[id] = handle{reader: inodeReader}
 	op.Handle = id
 
 	return nil
@@ -1348,15 +1359,16 @@ func (s *SDAfs) ReleaseFileHandle(
 		return EINVAL
 	}
 
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
 	delete(s.handles, op.Handle)
 	s.maplock.Unlock()
 
-	if r != nil {
-		err := r.Close()
+	err := r.reader.Close()
 
-		if err != nil {
-			slog.Warn("Ignoring failure for closing file handle", "err", err)
-		}
+	if err != nil {
+		slog.Warn("Ignoring failure for closing file handle", "err", err)
 	}
 	return nil
 }
@@ -1411,7 +1423,10 @@ func (s *SDAfs) ReadFile(
 		return EIO
 	}
 
-	pos, err := r.Seek(op.Offset, io.SeekStart)
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	pos, err := r.reader.Seek(op.Offset, io.SeekStart)
 	if err != nil || pos != op.Offset {
 		slog.Info("Seek failed or didn't return expected result",
 			"handle", op.Handle,
@@ -1419,7 +1434,7 @@ func (s *SDAfs) ReadFile(
 		return EIO
 	}
 
-	op.BytesRead, err = r.Read(op.Dst)
+	op.BytesRead, err = r.reader.Read(op.Dst)
 
 	if err != nil && err != io.EOF {
 		slog.Info("Reading gave error",
