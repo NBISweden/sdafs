@@ -1415,7 +1415,9 @@ func (s *SDAfs) ReadFile(
 	_ context.Context,
 	op *ReadFileOp) error {
 
+	s.maplock.RLock()
 	r, exist := s.handles[op.Handle]
+	s.maplock.RUnlock()
 
 	if !exist {
 		slog.Info("ReadFile called for handle that doesn't exist",
