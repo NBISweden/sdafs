@@ -455,7 +455,8 @@ func (s *SDAfs) getDatasets() error {
 
 type datasetFile struct {
 	FileID                    string `json:"fileId"`
-	FilePath                  string `json:"filePath"`
+	DatasetFilePath           string `json:"filePath"`
+	cleanPath                 string
 	DecryptedFileSize         uint64 `json:"decryptedSize"`
 	DecryptedFileChecksum     string `json:"decryptedFileChecksum"`
 	DecryptedFileChecksumType string `json:"decryptedFileChecksumType"`
@@ -759,25 +760,30 @@ func (s *SDAfs) loadDataset(dataSetName string) error {
 
 // trimNames cleans up paths and possibly removes .c4gh suffixes
 func (s *SDAfs) trimNames(contents []datasetFile) {
+
+	// We explicitly do not handle the case of cleaning of DatasetFilePath
+	// leading to collisions, there's no good way to deal with such datasets
+	for i := range contents {
+		// Remove any starting slashes
+		fp := strings.TrimLeft(contents[i].DatasetFilePath, "/")
+		contents[i].cleanPath = path.Clean(fp)
+	}
+
 	for i, entry := range contents {
 
-		// Remove any starting slashes
-		entry.FilePath = strings.TrimLeft(entry.FilePath, "/")
-		entry.FilePath = path.Clean(entry.FilePath)
-
-		_, fileName := path.Split(entry.FilePath)
+		_, fileName := path.Split(entry.cleanPath)
 
 		if s.conf.RemoveSuffix {
 			//	We should remove c4gh suffix
 			stripped := strings.TrimSuffix(fileName, ".c4gh")
-			strippedFull := strings.TrimSuffix(entry.FilePath, ".c4gh")
+			strippedFull := strings.TrimSuffix(entry.cleanPath, ".c4gh")
 
 			// Make sure there doesn't already exist the same name as we'd get
 			// by stripping
 
 			found := false
 			for _, p := range contents {
-				if p.FilePath == strippedFull {
+				if p.cleanPath == strippedFull {
 					found = true
 					break
 				}
@@ -797,7 +803,7 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 	entry datasetFile,
 	dataSetName string) {
 
-	split := strings.Split(entry.FilePath, "/")
+	split := strings.Split(entry.cleanPath, "/")
 
 	if s.conf.SkipLevels > 0 {
 		split = split[s.conf.SkipLevels:]
@@ -869,7 +875,7 @@ func (s *SDAfs) attachSDAObject(dirs map[string]*inode,
 		},
 		dir:         false,
 		dataset:     dataSetName,
-		key:         entry.FilePath,
+		key:         entry.cleanPath,
 		downloadURL: entry.DownloadURL,
 		fileSize:    entry.DecryptedFileSize,
 		rawFileSize: entry.FileSize,
