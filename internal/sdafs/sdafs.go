@@ -96,7 +96,7 @@ type SDAfs struct {
 	maplock sync.RWMutex
 
 	// handles is used to keep track of open "files"
-	handles map[HandleID]handle
+	handles map[HandleID]*handle
 
 	// extraHeader is an extra header we add on requests, we put cookies
 	// we should use there
@@ -270,7 +270,7 @@ func (s *SDAfs) initMaps() {
 	}
 
 	if s.handles == nil {
-		s.handles = make(map[HandleID]handle)
+		s.handles = make(map[HandleID]*handle)
 	}
 
 	if s.loading == nil {
@@ -451,9 +451,6 @@ func (s *SDAfs) getDatasets() error {
 			return nil
 		}
 	}
-
-	// Fall through case should also cause an update
-	s.datasets = datasets
 }
 
 type datasetFile struct {
@@ -1288,12 +1285,6 @@ func (s *SDAfs) OpenFile(
 		return EIO
 	}
 
-	if inodeReader == nil {
-		slog.Error("reader was nil unexpectedly",
-			"key", in.key)
-		return EIO
-	}
-
 	// Note: HTTPReader supports Close but doesn't really care for it so
 	// we don't go through the trouble of closing it at the end if we're doing
 	// crypt4gh
@@ -1309,7 +1300,7 @@ func (s *SDAfs) OpenFile(
 		return fmt.Errorf("error while getting new ID: %w", err)
 	}
 
-	s.handles[id] = handle{reader: inodeReader}
+	s.handles[id] = &handle{reader: inodeReader}
 	op.Handle = id
 
 	return nil

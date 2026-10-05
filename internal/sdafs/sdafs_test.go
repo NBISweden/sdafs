@@ -513,18 +513,18 @@ func (testReadSeekCloser) Read(b []byte) (int, error) {
 
 func TestReleaseFileHandle(t *testing.T) {
 	s := &SDAfs{}
-	s.handles = make(map[HandleID]handle, 0)
+	s.handles = make(map[HandleID]*handle, 0)
 	err := s.ReleaseFileHandle(context.TODO(), &ReleaseFileHandleOp{})
 	assert.NotNil(t, err, "Releasing an unallocated handle should fail")
 
-	s.handles[100] = handle{reader: testReadSeekCloser{}}
+	s.handles[100] = &handle{reader: testReadSeekCloser{}}
 	err = s.ReleaseFileHandle(context.TODO(), &ReleaseFileHandleOp{Handle: 100})
 	assert.Nil(t, err, "Releasing an allocated handle should work")
 }
 
 func TestGetNewIdLocked(t *testing.T) {
 	s := &SDAfs{}
-	s.handles = make(map[HandleID]handle, 0)
+	s.handles = make(map[HandleID]*handle, 0)
 	id, err := s.getNewIDLocked()
 	assert.Nil(t, err, "Getting a handle should work")
 
