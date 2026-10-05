@@ -1428,15 +1428,18 @@ func (s *SDAfs) ReadFile(
 
 	s.maplock.RLock()
 	r, exist := s.handles[op.Handle]
-	s.maplock.RUnlock()
 
 	if !exist {
+		s.maplock.RUnlock()
+
 		slog.Info("ReadFile called for handle that doesn't exist",
 			"handle", op.Handle)
 		return EIO
 	}
 
 	r.lock.Lock()
+	s.maplock.RUnlock()
+
 	defer r.lock.Unlock()
 
 	pos, err := r.reader.Seek(op.Offset, io.SeekStart)
