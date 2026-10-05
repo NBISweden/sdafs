@@ -532,7 +532,7 @@ func (s *SDAfs) checkConnectionLoop() {
 			continue
 		}
 
-		s.tokenLoadTime = time.Now()
+		s.tokenLoadTime = stat.ModTime()
 
 	}
 }
