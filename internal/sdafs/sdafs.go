@@ -380,7 +380,7 @@ type datasetListResponse struct {
 
 func (s *SDAfs) getDatasets() error {
 
-	s.datasets = make([]string, 0)
+	datasets := make([]string, 0)
 	var ds datasetListResponse
 
 	for {
@@ -432,13 +432,13 @@ func (s *SDAfs) getDatasets() error {
 
 		if len(s.conf.DatasetsToShow) == 0 {
 			// Include all datasets we can access
-			s.datasets = append(s.datasets, ds.Datasets...)
+			datasets = append(datasets, ds.Datasets...)
 		} else {
 
 			// We need to filter datasets
 			for _, dataset := range ds.Datasets {
 				if slices.Contains(s.conf.DatasetsToShow, dataset) {
-					s.datasets = append(s.datasets, dataset)
+					datasets = append(datasets, dataset)
 				}
 			}
 		}
@@ -446,9 +446,14 @@ func (s *SDAfs) getDatasets() error {
 		if ds.NextPageToken == nil || len(*ds.NextPageToken) == 0 {
 			r.Body.Close() //nolint:errcheck
 
+			s.datasets = datasets
+
 			return nil
 		}
 	}
+
+	// Fall through case should also cause an update
+	s.datasets = datasets
 }
 
 type datasetFile struct {
