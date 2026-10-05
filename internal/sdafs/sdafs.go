@@ -279,30 +279,28 @@ func (s *SDAfs) initMaps() {
 }
 
 // readToken extracts the token from the credentials file
-func (s *SDAfs) readToken() error {
+func (s *SDAfs) readToken() (string, error) {
 	if s.conf == nil {
-		return fmt.Errorf("no configuration provided")
+		return "", fmt.Errorf("no configuration provided")
 	}
-
-	s.tokenLoadTime = time.Now()
 
 	f, err := ini.Load(s.conf.CredentialsFile)
 
 	if err != nil {
-		return fmt.Errorf("error while opening credentials file %s: %w",
+		return "", fmt.Errorf("error while opening credentials file %s: %w",
 			s.conf.CredentialsFile,
 			err)
 	}
 
 	for _, section := range f.Sections() {
 		if section.HasKey("access_token") {
-			s.token = section.Key("access_token").String()
-			s.httpReaderConf.Token = s.token
-			return nil
+			token := section.Key("access_token").String()
+
+			return token, nil
 		}
 	}
 
-	return fmt.Errorf("no access token found in %s", s.conf.CredentialsFile)
+	return "", fmt.Errorf("no access token found in %s", s.conf.CredentialsFile)
 }
 
 func (s *SDAfs) doRequest(relPath, method string, extras ...string) (*http.Response, error) {
@@ -494,6 +492,8 @@ func (s *SDAfs) checkConnectionLoop() {
 			slog.Error("Failed to stat credentials file",
 				"file", s.conf.CredentialsFile,
 				"error", err)
+
+			continue // Assume we don't need to do anything if we can't stat the file
 		}
 
 		// Credentials file hasn't been updated, even if the token no longer
@@ -507,16 +507,18 @@ func (s *SDAfs) checkConnectionLoop() {
 
 		safeToken := s.token
 
-		err = s.readToken()
+		token, err := s.readToken()
 		if err != nil {
-			// Failed, try to restore
-			s.token = safeToken
-			s.httpReaderConf.Token = safeToken
+			// Failed, pass for now
+
 			slog.Error("Failed to read token from credentials file",
 				"file", s.conf.CredentialsFile,
 				"error", err)
 			continue
 		}
+
+		s.token = token
+		s.httpReaderConf.Token = token
 
 		err = s.getDatasets()
 		if err != nil {
@@ -529,6 +531,9 @@ func (s *SDAfs) checkConnectionLoop() {
 				"error", err)
 			continue
 		}
+
+		s.tokenLoadTime = time.Now()
+
 	}
 }
 
@@ -1048,11 +1053,15 @@ func (s *SDAfs) setup() error {
 
 func (s *SDAfs) VerifyCredentials() error {
 
-	err := s.readToken()
+	token, err := s.readToken()
 	if err != nil {
 		return fmt.Errorf("error while getting token: %w",
 			err)
 	}
+
+	s.token = token
+	s.httpReaderConf.Token = token
+	s.tokenLoadTime = time.Now()
 
 	err = s.getDatasets()
 	if err != nil {
