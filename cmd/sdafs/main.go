@@ -65,6 +65,8 @@ func getConfigs() mainConfig {
 	var group uint
 	var cgofuse bool
 	var cgofuseOptions string
+	var http1, http2 bool
+	var maxIdleConns uint
 
 	var credentialsDefault string
 	home, err := os.UserHomeDir()
@@ -123,6 +125,9 @@ func getConfigs() mainConfig {
 		flag.BoolVar(&open, "open", false, "Set permissions allowing access by others than the user")
 	}
 
+	flag.BoolVar(&http1, "http1", true, "Allow use of http1")
+	flag.BoolVar(&http2, "http2", true, "Allow use of http2")
+	flag.UintVar(&maxIdleConns, "maxidleconnections", 100, "Maximum idle connections (by extension connection pool size)")
 	flag.Parse()
 
 	passed := make([]string, 0)
@@ -185,6 +190,9 @@ func getConfigs() mainConfig {
 		ExtraCAFile:     extraCAFile,
 		DatasetsToShow:  showDatasets,
 		CacheMaxTTL:     cacheMaxTTL,
+		HTTP1:           http1,
+		HTTP2:           http2,
+		MaxIdleConns:    maxIdleConns,
 	}
 
 	if slices.Contains(passed, "owner") {
