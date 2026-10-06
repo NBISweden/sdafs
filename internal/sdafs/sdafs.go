@@ -183,6 +183,15 @@ type Conf struct {
 	// CacheMaxTTL sets the maximum TTL for cache entries, 0 means no
 	// TTL-based expiry
 	CacheMaxTTL time.Duration
+
+	// HTTP1 sets whatever http1 connections should be allowed
+	HTTP1 bool
+	// HTTP2 sets whatever http2 connections should be allowed
+	HTTP2 bool
+
+	// MaxIdleConns is the value passed to the transport to configure maximum
+	// number of idle connections (and by extension the connection pool size)
+	MaxIdleConns uint
 }
 
 // inode is the struct to manage a directory entry
@@ -977,12 +986,18 @@ func (s *SDAfs) setup() error {
 	} else {
 		transport := http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
-			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          100,
+			MaxIdleConns:          int(s.conf.MaxIdleConns),
 			TLSClientConfig:       tlsConfig,
 			TLSHandshakeTimeout:   30 * time.Second,
 			ExpectContinueTimeout: 10 * time.Second,
-			IdleConnTimeout:       1800 * time.Second}
+			IdleConnTimeout:       1800 * time.Second,
+			ForceAttemptHTTP2:     s.conf.HTTP2,
+			Protocols:             new(http.Protocols),
+		}
+
+		transport.Protocols.SetHTTP1(s.conf.HTTP1)
+		transport.Protocols.SetHTTP2(s.conf.HTTP2)
+		transport.Protocols.SetUnencryptedHTTP2(false)
 
 		jar, err := cookiejar.New(
 			&cookiejar.Options{
