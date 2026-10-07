@@ -463,6 +463,8 @@ func (r *HTTPReader) isPrefetching(offset uint64) bool {
 
 func (r *HTTPReader) Read(dst []byte) (n int, err error) {
 
+	r.checkEarlyPrefetch(len(dst))
+
 	r.lock.Lock()
 	start := r.currentOffset
 	slog.Log(context.Background(),
@@ -576,4 +578,36 @@ func (r *HTTPReader) Read(dst []byte) (n int, err error) {
 	go r.prefetchAt(0*time.Second, r.currentOffset)
 
 	return n, err
+}
+
+func (r *HTTPReader) checkEarlyPrefetch(maxRead int) {
+
+	ps := r.prefetchSize()
+	r.lock.Lock()
+	offset := r.currentOffset
+
+	slog.Log(context.Background(),
+		traceLevel,
+		"CheckEarlyPrefetch",
+		"url", r.fileURL,
+		"id", r.id,
+		"offset", offset,
+		"maxlength", maxRead)
+	r.lock.Unlock()
+
+	inCurrentCacheBlock := offset % ps
+	if inCurrentCacheBlock > ps/2 {
+		// We've starting with having consumed more than half, request the
+		// following block
+		go r.prefetchAt(0*time.Second, offset+ps)
+	}
+
+	if uint64(maxRead) > ps {
+		// The read buffer covers more than a single prefetch, we should
+		// trigger prefetches for the following blocks as well
+
+		for o, end := offset+ps, offset+uint64(maxRead); o < end; o += ps {
+			go r.prefetchAt(0*time.Second, o)
+		}
+	}
 }
