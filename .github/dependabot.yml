@@ -23,6 +23,18 @@ updates:
     cooldown:
       default-days: 7
 
+  - package-ecosystem: gomod
+    directory: "/"
+    groups:
+      all-modules:
+        patterns:
+          - "*"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    target-branch: v1
+
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
