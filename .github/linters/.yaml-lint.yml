@@ -8,3 +8,10 @@ ignore:
   - github/workspace/charts/sdafs/templates/*.yaml
   - /github/workspace/charts/sdafs/templates/
   - /github/workspace/charts/sdafs/templates/*.yaml
+
+rules:
+  line-length:
+    ignore:
+      - .github/workflows/release.yaml
+      - github/workspace/.github/workflows/release.yaml
+      - /github/workspace/.github/workflows/release.yaml
