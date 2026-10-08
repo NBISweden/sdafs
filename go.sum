@@ -8,8 +8,8 @@ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/dchest/bcrypt_pbkdf v0.0.0-20150205184540-83f37f9c154a h1:saTgr5tMLFnmy/yg3qDTft4rE5DY2uJ/cCxCe3q0XTU=
-github.com/dchest/bcrypt_pbkdf v0.0.0-20150205184540-83f37f9c154a/go.mod h1:Bw9BbhOJVNR+t0jCqx2GC6zv0TGBsShs56Y3gfSCvl0=
+github.com/dchest/bcrypt_pbkdf v1.0.0 h1:yA7I7QWm/GywkYp3Qz0O0tMS1K+OlwLtMtqE74Vwte0=
+github.com/dchest/bcrypt_pbkdf v1.0.0/go.mod h1:k4Q6Nrt9bWmsE3Qi+T9gDpEUCYzEqXXB1clOVZXv+Fk=
 github.com/dgraph-io/ristretto/v2 v2.4.2 h1:x0cvjmUKxt764Yxdk2nr94we1AvPPAMh1rh5TQ+Jo80=
 github.com/dgraph-io/ristretto/v2 v2.4.2/go.mod h1:0KsrXtXvnv0EqnzyowllbVJB8yBonswa2lTCK2gGo9E=
 github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da h1:aIftn67I1fkbMa512G+w+Pxci9hJPB8oMnkcP3iZF38=
@@ -34,8 +34,8 @@ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/maxatome/go-testdeep v1.14.0 h1:rRlLv1+kI8eOI3OaBXZwb3O7xY3exRzdW5QyX48g9wI=
 github.com/maxatome/go-testdeep v1.14.0/go.mod h1:lPZc/HAcJMP92l7yI6TRz1aZN5URwUBUAfUNvrclaNM=
-github.com/neicnordic/crypt4gh v1.15.2 h1:KGXhGiXVNUsaiDyxel9hhcm/mtsHnD4t6A08MhZAVS8=
-github.com/neicnordic/crypt4gh v1.15.2/go.mod h1:4FYcQUA0mtdEosuktXaWw8IID2VYL8lKKHbSKxoI4g4=
+github.com/neicnordic/crypt4gh v1.16.0 h1:HFBQ/tUgXvFXo9jALc5GS50Imo2QxWYOmTiXFTUhAPs=
+github.com/neicnordic/crypt4gh v1.16.0/go.mod h1:XemjCKB1/YwvCb+mGFmOkSodKrc1MyuErOVHoHD6fEM=
 github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 h1:onHthvaw9LFnH4t2DcNVpwGmV9E1BkGknEliJkfwQj0=
 github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58/go.mod h1:DXv8WO4yhMYhSNPKjeNKa5WY9YCIEBRbNzFFPJbWO6Y=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
