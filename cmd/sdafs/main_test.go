@@ -282,7 +282,7 @@ func runExiting(t *testing.T,
 
 	e, ok := err.(*exec.ExitError)
 
-	allOutput := string(stdout.Bytes()) + string(stderr.Bytes())
+	allOutput := stdout.String() + stderr.String()
 
 	if !strings.Contains(allOutput, inOutput) {
 		t.Fatalf("%v required in output but not found in text %v",
