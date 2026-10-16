@@ -25,6 +25,12 @@ import (
 
 var Version string = "development"
 
+// version prints the version and exits
+func version() {
+	fmt.Printf("sdafs version: %s\n", Version)
+	os.Exit(0)
+}
+
 // usage prints usage and version for the benefit of the user
 func usage() {
 	_, err := fmt.Fprintf(flag.CommandLine.Output(),
@@ -67,6 +73,7 @@ func getConfigs() mainConfig {
 	var cgofuseOptions string
 	var http1, http2 bool
 	var maxIdleConns uint
+	var showVersion bool
 
 	var credentialsDefault string
 	home, err := os.UserHomeDir()
@@ -76,6 +83,8 @@ func getConfigs() mainConfig {
 	} else {
 		credentialsDefault = filepath.Join(home, ".s3cfg")
 	}
+
+	flag.BoolVar(&showVersion, "version", false, "Show version and exit")
 
 	flag.StringVar(&credentialsFile, "credentialsfile", credentialsDefault, "Credentials file")
 	flag.StringVar(&rootURL, "rootURL", "https://download.bp.nbis.se", "Root URL for the SDA download interface")
@@ -129,6 +138,10 @@ func getConfigs() mainConfig {
 	flag.BoolVar(&http2, "http2", true, "Allow use of http2")
 	flag.UintVar(&maxIdleConns, "maxidleconnections", 100, "Maximum idle connections (by extension connection pool size)")
 	flag.Parse()
+
+	if showVersion {
+		version()
+	}
 
 	passed := make([]string, 0)
 
