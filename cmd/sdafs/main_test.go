@@ -21,7 +21,19 @@ func TestConfOptionNoMountPoint(t *testing.T) {
 		return
 	}
 
-	runExiting(t, "TestConfOptionNoMountPoint")
+	runExiting(t, "TestConfOptionNoMountPoint", false)
+}
+
+func TestVersion(t *testing.T) {
+	if os.Getenv("BE_CRASHER") == "1" {
+		os.Args = []string{"binary", "-version"}
+		flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+		flag.Parse()
+		getConfigs()
+		return
+	}
+
+	runExiting(t, "TestVersion", true)
 }
 
 func TestBadChunkSize(t *testing.T) {
@@ -33,7 +45,7 @@ func TestBadChunkSize(t *testing.T) {
 		return
 	}
 
-	runExiting(t, "TestBadChunkSize")
+	runExiting(t, "TestBadChunkSize", false)
 }
 
 func TestBadMaxRetries(t *testing.T) {
@@ -45,7 +57,7 @@ func TestBadMaxRetries(t *testing.T) {
 		return
 	}
 
-	runExiting(t, "TestBadMaxRetries")
+	runExiting(t, "TestBadMaxRetries", false)
 }
 
 func TestBadUID(t *testing.T) {
@@ -57,7 +69,7 @@ func TestBadUID(t *testing.T) {
 		return
 	}
 
-	runExiting(t, "TestBadUID")
+	runExiting(t, "TestBadUID", false)
 }
 
 func TestBadGID(t *testing.T) {
@@ -69,7 +81,7 @@ func TestBadGID(t *testing.T) {
 		return
 	}
 
-	runExiting(t, "TestBadGID")
+	runExiting(t, "TestBadGID", false)
 }
 
 func TestConfOptions(t *testing.T) {
@@ -253,16 +265,30 @@ func TestRepoint(t *testing.T) {
 	assert.Nil(t, err, "Cleanup failed")
 }
 
-func runExiting(t *testing.T, testName string) {
+func runExiting(t *testing.T, testName string, shouldSucceed bool) {
 	cmd := exec.Command(os.Args[0], "-test.run="+testName)
 	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
 	err := cmd.Run()
-	if e, ok := err.(*exec.ExitError); ok && !e.Success() {
+
+	e, ok := err.(*exec.ExitError)
+
+	if shouldSucceed && ok == false {
+		// No error but not expected
 		return
 	}
 
-	t.Fatalf("process succeeded when it should not for test %s"+
-		" %v, want exit status 1",
+	if ok && e.Success() == shouldSucceed {
+		return
+	}
+
+	if !shouldSucceed && !ok {
+		t.Fatalf("no error when we expect one from %v", testName)
+	}
+
+	t.Fatalf("Bad exit status from process - expected success was %v but "+
+		"actual %v for %v (err: %v)",
+		shouldSucceed,
+		e.Success(),
 		testName,
 		err)
 }
@@ -275,5 +301,5 @@ func TestRepointFail(t *testing.T) {
 		repointLog(m)
 		return
 	}
-	runExiting(t, "TestRepointFail")
+	runExiting(t, "TestRepointFail", false)
 }
