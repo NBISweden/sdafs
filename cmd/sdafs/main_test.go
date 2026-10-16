@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,7 +23,7 @@ func TestConfOptionNoMountPoint(t *testing.T) {
 		return
 	}
 
-	runExiting(t, "TestConfOptionNoMountPoint", false)
+	runExiting(t, "TestConfOptionNoMountPoint", false, "Usage:")
 }
 
 func TestVersion(t *testing.T) {
@@ -33,7 +35,7 @@ func TestVersion(t *testing.T) {
 		return
 	}
 
-	runExiting(t, "TestVersion", true)
+	runExiting(t, "TestVersion", true, "sdafs version")
 }
 
 func TestBadChunkSize(t *testing.T) {
@@ -45,7 +47,7 @@ func TestBadChunkSize(t *testing.T) {
 		return
 	}
 
-	runExiting(t, "TestBadChunkSize", false)
+	runExiting(t, "TestBadChunkSize", false, "Chunk size")
 }
 
 func TestBadMaxRetries(t *testing.T) {
@@ -57,7 +59,7 @@ func TestBadMaxRetries(t *testing.T) {
 		return
 	}
 
-	runExiting(t, "TestBadMaxRetries", false)
+	runExiting(t, "TestBadMaxRetries", false, "Max retries")
 }
 
 func TestBadUID(t *testing.T) {
@@ -69,7 +71,7 @@ func TestBadUID(t *testing.T) {
 		return
 	}
 
-	runExiting(t, "TestBadUID", false)
+	runExiting(t, "TestBadUID", false, "uid requested larger")
 }
 
 func TestBadGID(t *testing.T) {
@@ -81,7 +83,7 @@ func TestBadGID(t *testing.T) {
 		return
 	}
 
-	runExiting(t, "TestBadGID", false)
+	runExiting(t, "TestBadGID", false, "gid requested larger")
 }
 
 func TestConfOptions(t *testing.T) {
@@ -265,12 +267,28 @@ func TestRepoint(t *testing.T) {
 	assert.Nil(t, err, "Cleanup failed")
 }
 
-func runExiting(t *testing.T, testName string, shouldSucceed bool) {
+func runExiting(t *testing.T,
+	testName string,
+	shouldSucceed bool,
+	inOutput string) {
 	cmd := exec.Command(os.Args[0], "-test.run="+testName)
+	stderr := bytes.Buffer{}
+	stdout := bytes.Buffer{}
+	cmd.Stderr = &stderr
+	cmd.Stdout = &stdout
+
 	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
 	err := cmd.Run()
 
 	e, ok := err.(*exec.ExitError)
+
+	allOutput := string(stdout.Bytes()) + string(stderr.Bytes())
+
+	if !strings.Contains(allOutput, inOutput) {
+		t.Fatalf("%v required in output but not found in text %v",
+			inOutput,
+			allOutput)
+	}
 
 	if shouldSucceed && ok == false {
 		// No error but not expected
@@ -293,7 +311,7 @@ func runExiting(t *testing.T, testName string, shouldSucceed bool) {
 		err)
 }
 
-func TestRepointFail(t *testing.T) {
+func TestRepointLogFail(t *testing.T) {
 
 	// https://stackoverflow.com/a/33404435
 	if os.Getenv("BE_CRASHER") == "1" {
@@ -301,5 +319,18 @@ func TestRepointFail(t *testing.T) {
 		repointLog(m)
 		return
 	}
-	runExiting(t, "TestRepointFail", false)
+	runExiting(t, "TestRepointLogFail", false, "Couldn't open requested log file")
+}
+
+func TestBadMount(t *testing.T) {
+
+	// https://stackoverflow.com/a/33404435
+	if os.Getenv("BE_CRASHER") == "1" {
+		os.Args = []string{"binary", "/does/not/exist"}
+		flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+		flag.Parse()
+		main()
+		return
+	}
+	runExiting(t, "TestBadMount", false, "desired mount point")
 }
