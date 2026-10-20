@@ -76,13 +76,16 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}\n
             "
 
-      - name: Prepare chart
+      - name: Prepare and push chart, fetch old and build index
         env:
           TAG: "${{ github.ref_name }}"
+          TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          GHCRUSER: ${{ github.actor }}
+          product: sdafs
         run: |
 
           # Get image digest
-          digest=$(docker inspect ghcr.io/nbisweden/sdafs:"$TAG" |
+          digest=$(docker inspect "ghcr.io/nbisweden/$product:$TAG" |
              jq -r '.[].RepoDigests[]')
           if [ -z "$digest" ] || [ "$(echo "$digest" | wc -l)" -ne 1 ]; then
             echo "Unexpected digest: $digest"
@@ -90,17 +93,31 @@ jobs:
           fi
 
           yq eval ".image.digest=\"${digest#*@}\"" \
-            -i charts/sdafs/values.yaml
+            -i charts/"$product"/values.yaml
 
           yq eval ".version=\"${TAG#v}\"" \
-            -i charts/sdafs/Chart.yaml
+            -i charts/"$product"/Chart.yaml
 
           mkdir web
           cd web
           mv ../charts .
 
           helm package --app-version="${TAG}" \
-            ./charts/sdafs/
+            ./charts/"$product"
+
+          helm registry login --username "$GHCRUSER" --password "$TOKEN" ghcr.io
+
+          helm push --username "$GHCRUSER" --password "$TOKEN" \
+            "$product"-"${TAG#v}".tgz \
+            oci://ghcr.io/nbisweden/charts
+
+          git fetch --tags origin
+
+          git tag | grep '^v' | cut -c 2- | while read -r version; do
+            # try to pull the chart for version "$version", but no worries
+            # if we fail
+            helm pull oci://ghcr.io/nbisweden/charts/"$product:$version" || true
+          done
 
           helm repo index .
 
