@@ -106,8 +106,9 @@ We also provide a CSI driver to allow usage with kubernetes. Due to its nature,
 providing system services this likely needs exceptions/acknowledgements from
 security monitoring/admission systems.
 
-There is a helm chart provided for installation. See `charts/sdafs/values.yaml`
-for possible deployment options
+There is a helm chart provided for installation, available at
+`oci://ghcr.io/nbisweden/charts/sdafs` with the appropriate version tag.
+See `charts/sdafs/values.yaml` for possible deployment options
 
 ### Running sdafs CSI inside Kubernetes
 
@@ -185,6 +186,15 @@ improvement. We haven't seen or investigated
 [csi-utils#66](https://github.com/kubernetes-csi/csi-lib-utils/issues/66) so
 that could possibly be a reason they'd be _needed_ rather than just a very good
 idea.
+
+### NetworkPolicy
+
+The helm chart currently does not provide any `NetworkPolicy`. If you will
+provide one yourself, the pods from the csi-sdafs DaemonSet require egress
+connectivity to DNS (with appropriate ingress for UDP) and the desired SDA
+endpoint. The attacher/provisioner DaemonSet require egress connectivity to DNS,
+the kubernetes api service. It offers diagnostic services via http at :4001 and
+:4002 but no effort is made to expose them outside of the pods.
 
 ## Using the sdafs CSI driver to access an archive as a user in kubernetes
 
