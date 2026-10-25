@@ -106,32 +106,13 @@ We also provide a CSI driver to allow usage with kubernetes. Due to its nature,
 providing system services this likely needs exceptions/acknowledgements from
 security monitoring/admission systems.
 
-The files in `deploy` provide samples that can be used for deploying in testing
-environment. We strongly recommend going through them to understand what
-components are involved and what privileges they run with.
+There is a helm chart provided for installation. See `charts/sdafs/values.yaml`
+for possible deployment options
 
-The files in `deploy` reflect system paths used by a typical kubernetes
-deployment. You may need to adapt them to tailor to your system.
+### Running sdafs CSI inside Kubernetes
 
-### Requirements
-
-To use sdafs within kubernetes, a setup is needed that provides the roles of
-attacher and provisioner as traditional for CSI (an example of configuration
-for these is available in `deploy/attacher.yaml`).
-
-At least one `StorageClass` resource must also be created with `provisioner` set
-to `csi.sda.nbis.se`. `deploy/storageclass.yaml` has an example that also
-demonstrates various options that can be used.
-
-A typical setup will need roles and permissions as per configured in
-`deploy/attacher.yaml`.
-
-#### Running sdafs CSI inside Kubernetes
-
-As traditionally is done, the sdafs CSI driver can be deployed inside kubernetes
-(as in `deploy/csi-sdafs.yaml`). Due to its nature as a CSI driver it requires
-a fair bit of permissions that may require acknowledgements/exceptions from
-security policies, these are:
+Due to its nature as a CSI driver it requires a fair bit of permissions that
+may require acknowledgements/exceptions from security policies, these are:
 
 - In pod `securityContext`:
   - `runAsUser: 0`
@@ -164,7 +145,7 @@ There is a `Dockerfile` in the repository for building container images with min
 extra contents and images should be published to the `ghcr.io/nbisweden/sdafs`
 repository upon releases.
 
-#### Running sdafs CSI outside kubernetes
+### Running sdafs CSI outside kubernetes
 
 The sdafs CSI driver can also be run "outside" of kubernetes. It must still
 be run with access to the respective host mount namespace (i.e. typically
@@ -173,16 +154,16 @@ alongside `kubelet`). Similarly, using a provisioner is still mandatory.
 ### Credentials provisioning
 
 The csi-provisioner as used will manage secret provisioning when configured in
-the `StorageClass` (see `deploy/storageclass.yaml` for an example). This allows
-a flexible way of providing secrets with the ability to use templates.
+the `StorageClass`. This allows a flexible way of providing secrets with the
+ability to use templates.
 
-The example `StorageClass` mentioned will look for a `Secret` in the same
-namespace as the `PersistantVolumeClaim` the provisioner is trying to satisfy,
-as for the actual name of the `Secret`, the example will pick that up from
-annotations to the `PersistantVolumeClaim` (expecting an annotation
-`sda.nbis.se/token-secret`, but that is also configurable). Similarly to how
-the `StorageClass` allows specifying what `Secret` to pick up the credentials
-from, it also allows you to specify what key in the `Secret` to use by
+The default `StorageClass` will look for a `Secret` in the same namespace as the
+`PersistantVolumeClaim` the provisioner is trying to satisfy, as for the actual
+name of the `Secret`, the example will pick that up from annotations to the
+`PersistantVolumeClaim` (expecting an annotation `sda.nbis.se/token-secret`,
+but that is also configurable). Similarly to how the `StorageClass` allows
+specifying what `Secret` to pick up the credentials from, it also allows you to
+specify what key in the `Secret` to use by
 passing a `tokenkey` (defaults to `token`)
 
 The appointed `Secret` will be searched for the key mentioned above. The value
@@ -208,8 +189,8 @@ idea.
 ## Using the sdafs CSI driver to access an archive as a user in kubernetes
 
 To consume storage as a user, assuming someone has configured sdafs CSI and
-created the appropriate `StorageClass` (e.g.as `sdafs`), you can create a
-persistent volume claim as per:
+created the appropriate `StorageClass` (e.g.as `sdafs`) by deploying with helm,
+you can create a persistent volume claim as per:
 
 ```text
 
