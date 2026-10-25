@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: csi-attacher-sdafs-sa
-  namespace: kube-system
+  namespace: {{ .Release.Namespace }}
 
 ---
 kind: ClusterRole
@@ -47,7 +47,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: csi-attacher-sdafs-sa
-    namespace: kube-system
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
   name: csi-attacher-sdafs-cr
@@ -58,7 +58,7 @@ kind: DaemonSet
 apiVersion: apps/v1
 metadata:
   name: csi-attacher-sdafs
-  namespace: kube-system
+  namespace: {{ .Release.Namespace }}
   annotations:
     checkov.io/skip1: CKV_K8S_9=No good probes available
     checkov.io/skip2: CKV_K8S_8=No good probes available
