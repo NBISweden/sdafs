@@ -193,7 +193,7 @@ The helm chart currently does not provide any `NetworkPolicy`. If you will
 provide one yourself, the pods from the csi-sdafs DaemonSet require egress
 connectivity to DNS (with appropriate ingress for UDP) and the desired SDA
 endpoint. The attacher/provisioner DaemonSet require egress connectivity to DNS,
-the kubernetes api service. It offers diagnostic services via http at :4001 and
+the kubernetes API service. It offers diagnostic services via http at :4001 and
 :4002 but no effort is made to expose them outside of the pods.
 
 ## Using the sdafs CSI driver to access an archive as a user in kubernetes
