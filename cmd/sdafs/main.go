@@ -56,6 +56,7 @@ type mainConfig struct {
 	logLevel       slog.Level
 	cgofuse        bool
 	cgofuseOptions string
+	run            string
 }
 
 // mainConfig makes the configuration structure from whatever sources applies
@@ -76,6 +77,7 @@ func getConfigs() mainConfig {
 	var http1, http2 bool
 	var maxIdleConns uint
 	var showVersion bool
+	var run string
 
 	var credentialsDefault string
 	home, err := os.UserHomeDir()
@@ -115,6 +117,11 @@ func getConfigs() mainConfig {
 		flag.BoolVar(&foreground, "foreground", false, "Do not detach, run in foreground and send log output to stdout")
 	} else {
 		foreground = true
+	}
+
+	if canUnshare() {
+		flag.StringVar(&run, "run", "", "Use unshare to run the specified program in a namespace with sdafs mounted"+
+			", this might help in some situations where regular mounts are not allowed")
 	}
 
 	// cgofuse mandatory on Windows, may be an option for some platforms
@@ -258,6 +265,11 @@ func getConfigs() mainConfig {
 		}
 	}
 
+	if run != "" {
+		// Don't detach if running something
+		foreground = true
+	}
+
 	m := mainConfig{mountPoint: mountPoint,
 		sdafsconf:      &conf,
 		foreground:     foreground,
@@ -266,6 +278,7 @@ func getConfigs() mainConfig {
 		logLevel:       slog.Level(logLevel),
 		cgofuse:        cgofuse,
 		cgofuseOptions: cgofuseOptions,
+		run:            run,
 	}
 
 	return m
@@ -312,6 +325,16 @@ func checkMountDir(m mainConfig) {
 func main() {
 	c := getConfigs()
 
+	if c.run != "" && !isReExec() {
+		err := reExecNewNS()
+
+		if err != nil {
+			log.Fatalf("failed to re-execute for unsharing: %v", err)
+		}
+
+		log.Fatalf("unexpected state after reexec, we shouldn't get here")
+	}
+
 	checkMountDir(c)
 
 	fs, err := sdafs.NewSDAfs(c.sdafsconf)
@@ -320,9 +343,18 @@ func main() {
 	}
 
 	repointLog(c)
+
 	mount, err := detachAndMount(c, fs)
 	if err != nil {
 		log.Fatalf("Error while mounting: %v", err)
+	}
+
+	if c.run != "" {
+		err = reExecRun(&c)
+
+		if err != nil {
+			slog.Error("error while running tool", "err", err)
+		}
 	}
 
 	afterMount(c, mount)
@@ -335,7 +367,6 @@ func afterMount(c mainConfig, mount cgofuseadapter.MountedFS) {
 	ch := make(chan os.Signal, 1)
 	go handleSignals(ch, c.mountPoint)
 	signal.Notify(ch, os.Interrupt)
-	// signal.Notify(c, os.Ter)
 
 	err := mount.Join(context.Background())
 	if err != nil {
