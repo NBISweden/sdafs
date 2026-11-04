@@ -125,6 +125,10 @@ func detachIfNeeded(c mainConfig) (*os.File, error) {
 		log.Fatalf("failed to read error stream from detached process: %v", err)
 	}
 
+	if string(errortext) == GOOD_MOUNT_MARKER {
+		os.Exit(0)
+	}
+
 	for i := 0; i < len(errortext); {
 
 		n, err := os.Stderr.Write(errortext[i:])
@@ -133,11 +137,6 @@ func detachIfNeeded(c mainConfig) (*os.File, error) {
 		if err != nil {
 			log.Fatalf("error while writing: %v", err)
 		}
-	}
-
-	if len(errortext) == 0 {
-		// No news is good news
-		os.Exit(0)
 	}
 
 	os.Exit(1)
