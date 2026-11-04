@@ -83,10 +83,14 @@ func detachIfNeeded(c mainConfig) (*os.File, error) {
 		return os.Stderr, nil
 	}
 
-	os.Setenv(DAEMON_MARKER, DAEMON_VALUE)
+	err := os.Setenv(DAEMON_MARKER, DAEMON_VALUE)
+	if err != nil {
+		return nil, fmt.Errorf("set marker environment value: %w", err)
+	}
+
 	r, w, err := os.Pipe()
 	if err != nil {
-		return nil, fmt.Errorf("couldn't create pipe for communicaton: %w", err)
+		return nil, fmt.Errorf("couldn't create pipe for communication: %w", err)
 	}
 
 	p := os.ProcAttr{
