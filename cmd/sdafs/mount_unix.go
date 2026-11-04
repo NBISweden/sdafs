@@ -8,6 +8,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"syscall"
 
 	"github.com/NBISweden/sdafs/internal/cgofuseadapter"
 	"github.com/NBISweden/sdafs/internal/sdafs"
@@ -94,10 +95,15 @@ func detachIfNeeded(c mainConfig) (*os.File, error) {
 	}
 
 	p := os.ProcAttr{
-		Files: []*os.File{w, w, w},
+		Sys: &syscall.SysProcAttr{
+			Setsid: true,
+		},
+		Files: []*os.File{
+
+			w, w, w},
 	}
 
-executable, err := os.Executable()
+	executable, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("couldn't determine executable for detach: %w", err)
 	}
