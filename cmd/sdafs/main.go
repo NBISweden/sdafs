@@ -310,6 +310,12 @@ func main() {
 		go func() {
 			// Give a chance to run into error, then signal success
 			time.Sleep(5 * time.Second)
+
+			if errpipe == nil {
+				// Already sent what we want?
+				return
+			}
+
 			err := writeString(GOOD_MOUNT_MARKER, errpipe)
 			// If we get here and this fails, do not fatal on it
 			if err != nil {
@@ -320,6 +326,9 @@ func main() {
 			if err != nil {
 				log.Printf("error while closing interprocess communication pipe: %v", err)
 			}
+
+			// Signal to normal processing that we've sent a message
+			errpipe = nil
 		}()
 	}
 
@@ -330,7 +339,7 @@ func main() {
 		pipemsg = fmt.Sprintf("error while mounting: %v\n", err)
 	}
 
-	if errpipe != nil && !c.cgofuse {
+	if errpipe != nil {
 		err := writeString(pipemsg, errpipe)
 		if err != nil {
 			log.Fatalf("failed to write string to interprocess communication: %v", err)
@@ -346,11 +355,12 @@ func main() {
 
 	// Good case here
 
-	if errpipe != nil && !c.cgofuse {
+	if errpipe != nil {
 		err := errpipe.Close()
 		if err != nil {
 			log.Printf("error while closing interprocess communication pipe: %v", err)
 		}
+		errpipe = nil
 	}
 
 	afterMount(c, mount)
