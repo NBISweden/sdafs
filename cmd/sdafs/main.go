@@ -306,7 +306,17 @@ func main() {
 	mount, err := doMount(c, fs)
 
 	if err != nil && errpipe != nil {
-		errpipe.Write([]byte(fmt.Sprintf("error while mounting: %v\n", err)))
+		errortext := fmt.Sprintf("error while mounting: %v\n", err)
+
+		for i := 0; i < len(errortext); {
+
+			n, err := os.Stderr.WriteString(errortext[i:])
+
+			i += n
+			if err != nil {
+				log.Fatalf("error while writing: %v", err)
+			}
+		}
 	}
 
 	if err != nil {
