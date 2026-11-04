@@ -104,7 +104,7 @@ executable, err := os.Executable()
 	proc, err := os.StartProcess(executable, os.Args, &p)
 
 	if err != nil || proc == nil {
-		log.Fatalf("Failed to re-exex for detach: %v", err)
+		log.Fatalf("Failed to re-exec for detach: %v", err)
 	}
 
 	err = w.Close()
