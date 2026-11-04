@@ -25,6 +25,8 @@ import (
 
 var Version string = "development"
 
+const GOOD_MOUNT_MARKER = "MOUNT_OK"
+
 // usage prints usage and version for the benefit of the user
 func usage() {
 	_, err := fmt.Fprintf(flag.CommandLine.Output(),
@@ -305,22 +307,28 @@ func main() {
 
 	mount, err := doMount(c, fs)
 
-	if err != nil && errpipe != nil {
-		errortext := fmt.Sprintf("error while mounting: %v\n", err)
+	pipemsg := GOOD_MOUNT_MARKER
+	if err != nil {
+		pipemsg = fmt.Sprintf("error while mounting: %v\n", err)
+	}
 
-		for i := 0; i < len(errortext); {
+	if errpipe != nil {
+		for i := 0; i < len(pipemsg); {
 
-			n, err := os.Stderr.WriteString(errortext[i:])
+			n, err := os.Stderr.WriteString(pipemsg[i:])
 
 			i += n
 			if err != nil {
-				log.Fatalf("error while writing: %v", err)
+				log.Fatalf("error while writing to interprocess communication pipe: %v", err)
 			}
 		}
 	}
 
 	if err != nil {
-		log.Fatalf("error while mounting: %v", err)
+		if errpipe == nil {
+			log.Fatalf("error while mounting: %v", err)
+		}
+		os.Exit(1)
 	}
 
 	if errpipe != nil {
