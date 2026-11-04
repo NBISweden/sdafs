@@ -311,8 +311,10 @@ func main() {
 			// Give a chance to run into error, then signal success
 			time.Sleep(5 * time.Second)
 			err := writeString(GOOD_MOUNT_MARKER, errpipe)
-			// If we get here and this failes, do not fatal on it
-			log.Printf("Failed to write to interprocess communication: %v", err)
+			// If we get here and this fails, do not fatal on it
+			if err != nil {
+				log.Printf("Failed to write to interprocess communication: %v", err)
+			}
 
 			err = errpipe.Close()
 			if err != nil {
