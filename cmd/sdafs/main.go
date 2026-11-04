@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/NBISweden/sdafs/internal/cgofuseadapter"
@@ -322,6 +323,8 @@ func main() {
 	repointLog(c)
 	errpipe, err := detachIfNeeded(c)
 
+	pipelock := sync.Mutex{}
+
 	if err != nil {
 		log.Fatalf("error while detaching: %v", err)
 	}
@@ -331,6 +334,9 @@ func main() {
 		go func() {
 			// Give a chance to run into error, then signal success
 			time.Sleep(5 * time.Second)
+
+			pipelock.Lock()
+			defer pipelock.Unlock()
 
 			if errpipe == nil {
 				// Already sent what we want?
@@ -359,6 +365,9 @@ func main() {
 	if err != nil {
 		pipemsg = fmt.Sprintf("error while mounting: %v\n", err)
 	}
+
+	pipelock.Lock()
+	defer pipelock.Unlock()
 
 	if errpipe != nil {
 		err := writeString(pipemsg, errpipe)
