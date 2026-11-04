@@ -297,12 +297,27 @@ func main() {
 	}
 
 	repointLog(c)
-	detachIfNeeded(c)
+	errpipe, err := detachIfNeeded(c)
+
+	if err != nil {
+		log.Fatalf("error while detaching: %v", err)
+	}
 
 	mount, err := doMount(c, fs)
 
+	if err != nil && errpipe != nil {
+		errpipe.Write([]byte(fmt.Sprintf("error while mounting: %v\n", err)))
+	}
+
 	if err != nil {
-		log.Fatalf("Mount of sda at %s failed: %v", c.sdafsconf.RootURL, err)
+		log.Fatalf("error while mounting: %v", err)
+	}
+
+	if errpipe != nil {
+		err := errpipe.Close()
+		if err != nil {
+			log.Printf("error while closing interprocess communication pipe: %v", err)
+		}
 	}
 
 	afterMount(c, mount)

@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"os"
@@ -12,8 +13,10 @@ import (
 	"github.com/NBISweden/sdafs/internal/sdafs"
 	"github.com/jacobsa/fuse"
 	"github.com/jacobsa/fuse/fuseutil"
-	"github.com/sevlyar/go-daemon"
 )
+
+const DAEMON_MARKER = "SDAFS_DAEMON"
+const DAEMON_VALUE = "yes"
 
 func doMount(c mainConfig, fs *sdafs.SDAfs) (cgofuseadapter.MountedFS, error) {
 
@@ -54,23 +57,76 @@ func doUnmount(mp string) error {
 	return fuse.Unmount(mp)
 }
 
-// detachIfNeeded daemonizes if needed
-func detachIfNeeded(c mainConfig) {
-	if !c.foreground {
-		context := new(daemon.Context)
-		child, err := context.Reborn()
+// detachIfNeeded daemonizes if needed. It does this by setting a marker and
+// re-execing with a pipe for communication any issues on the initial mount
+// (we use a pipe rather than just preserving os.Stderr to be able to know
+// if we need to set a non-zero exit code).
+func detachIfNeeded(c mainConfig) (*os.File, error) {
+	if c.foreground {
+		return nil, nil
+	}
 
+	if os.Getenv(DAEMON_MARKER) == DAEMON_VALUE {
+		// child
+
+		err := os.Stdin.Close()
 		if err != nil {
-			log.Fatalf("Failed to detach")
+			return nil, fmt.Errorf("couldn't close stdin after detach: %w", err)
 		}
 
-		if child != nil {
-			os.Exit(0)
+		err = os.Stdout.Close()
+		if err != nil {
+			return nil, fmt.Errorf("couldn't close stdout after detach: %w", err)
 		}
 
-		if err := context.Release(); err != nil {
-			slog.Info("Unable to release pid file",
-				"error", err.Error())
+		// We keep the pipe-as-stderr but return it as the error pipe
+		return os.Stderr, nil
+	}
+
+	os.Setenv(DAEMON_MARKER, DAEMON_VALUE)
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, fmt.Errorf("couldn't create pipe for communicaton: %w", err)
+	}
+
+	p := os.ProcAttr{
+		Files: []*os.File{w, w, w},
+	}
+
+	proc, err := os.StartProcess("/proc/self/exe", os.Args, &p)
+
+	if err != nil || proc == nil {
+		log.Fatalf("Failed to re-exex for detach: %v", err)
+	}
+
+	err = w.Close()
+	if err != nil {
+		log.Fatalf("failure while closing intercommunication pipe: %v", err)
+	}
+
+	// This is expected to be small
+	errortext, err := io.ReadAll(r)
+
+	if err != nil {
+		log.Fatalf("failed to read error stream from detached process: %v", err)
+	}
+
+	for i := 0; i < len(errortext); {
+
+		n, err := os.Stderr.Write(errortext[i:])
+
+		i += n
+		if err != nil {
+			log.Fatalf("error while writing: %v", err)
 		}
 	}
+
+	if len(errortext) == 0 {
+		// No news is good news
+		os.Exit(0)
+	}
+
+	os.Exit(1)
+
+	return nil, err
 }

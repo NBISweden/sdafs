@@ -2,6 +2,7 @@ package main
 
 import (
 	"log/slog"
+	"os"
 
 	"github.com/NBISweden/sdafs/internal/cgofuseadapter"
 	"github.com/NBISweden/sdafs/internal/sdafs"
@@ -22,7 +23,7 @@ func doUnmount(mp string) error {
 }
 
 // detachIfNeeded daemonizes if needed
-func detachIfNeeded(c mainConfig) {
+func detachIfNeeded(c mainConfig) (*os.File, error) {
 
-	return
+	return nil, nil
 }
