@@ -15,7 +15,6 @@ import (
 	"runtime"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/NBISweden/sdafs/internal/cgofuseadapter"
@@ -300,76 +299,9 @@ func main() {
 	}
 
 	repointLog(c)
-	errpipe, err := detachIfNeeded(c)
-
-	pipelock := sync.Mutex{}
-
+	mount, err := detachAndMount(c, fs)
 	if err != nil {
-		log.Fatalf("error while detaching: %v", err)
-	}
-
-	if c.cgofuse && errpipe != nil {
-		// cgofuse will block and we need special handling to deal with
-		go func() {
-			// Give a chance to run into error, then signal success
-			time.Sleep(5 * time.Second)
-
-			pipelock.Lock()
-			defer pipelock.Unlock()
-
-			if errpipe == nil {
-				// Already sent what we want?
-				return
-			}
-
-			err := writeString(GOOD_MOUNT_MARKER, errpipe)
-			// If we get here and this fails, do not fatal on it
-			if err != nil {
-				log.Printf("Failed to write to interprocess communication: %v", err)
-			}
-
-			err = errpipe.Close()
-			if err != nil {
-				log.Printf("error while closing interprocess communication pipe: %v", err)
-			}
-
-			// Signal to normal processing that we've sent a message
-			errpipe = nil
-		}()
-	}
-
-	mount, err := doMount(c, fs)
-
-	pipemsg := GOOD_MOUNT_MARKER
-	if err != nil {
-		pipemsg = fmt.Sprintf("error while mounting: %v\n", err)
-	}
-
-	pipelock.Lock()
-	defer pipelock.Unlock()
-
-	if errpipe != nil {
-		err := writeString(pipemsg, errpipe)
-		if err != nil {
-			log.Fatalf("failed to write string to interprocess communication: %v", err)
-		}
-	}
-
-	if err != nil {
-		if errpipe == nil {
-			log.Fatalf("error while mounting: %v", err)
-		}
-		os.Exit(1)
-	}
-
-	// Good case here
-
-	if errpipe != nil {
-		err := errpipe.Close()
-		if err != nil {
-			log.Printf("error while closing interprocess communication pipe: %v", err)
-		}
-		errpipe = nil
+		log.Fatalf("Error while mounting: %v", err)
 	}
 
 	afterMount(c, mount)
