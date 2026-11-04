@@ -97,7 +97,11 @@ func detachIfNeeded(c mainConfig) (*os.File, error) {
 		Files: []*os.File{w, w, w},
 	}
 
-	proc, err := os.StartProcess("/proc/self/exe", os.Args, &p)
+executable, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("couldn't determine executable for detach: %w", err)
+	}
+	proc, err := os.StartProcess(executable, os.Args, &p)
 
 	if err != nil || proc == nil {
 		log.Fatalf("Failed to re-exex for detach: %v", err)
