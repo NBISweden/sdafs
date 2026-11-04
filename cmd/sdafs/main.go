@@ -305,6 +305,22 @@ func main() {
 		log.Fatalf("error while detaching: %v", err)
 	}
 
+	if c.cgofuse && errpipe != nil {
+		// cgofuse will block and we need special handling to deal with
+		go func() {
+			// Give a chance to run into error, then signal success
+			time.Sleep(5 * time.Second)
+			err := writeString(GOOD_MOUNT_MARKER, errpipe)
+			// If we get here and this failes, do not fatal on it
+			log.Printf("Failed to write to interprocess communication: %v", err)
+
+			err = errpipe.Close()
+			if err != nil {
+				log.Printf("error while closing interprocess communication pipe: %v", err)
+			}
+		}()
+	}
+
 	mount, err := doMount(c, fs)
 
 	pipemsg := GOOD_MOUNT_MARKER
@@ -312,15 +328,10 @@ func main() {
 		pipemsg = fmt.Sprintf("error while mounting: %v\n", err)
 	}
 
-	if errpipe != nil {
-		for i := 0; i < len(pipemsg); {
-
-			n, err := os.Stderr.WriteString(pipemsg[i:])
-
-			i += n
-			if err != nil {
-				log.Fatalf("error while writing to interprocess communication pipe: %v", err)
-			}
+	if errpipe != nil && !c.cgofuse {
+		err := writeString(pipemsg, errpipe)
+		if err != nil {
+			log.Fatalf("failed to write string to interprocess communication: %v", err)
 		}
 	}
 
@@ -331,7 +342,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	if errpipe != nil {
+	// Good case here
+
+	if errpipe != nil && !c.cgofuse {
 		err := errpipe.Close()
 		if err != nil {
 			log.Printf("error while closing interprocess communication pipe: %v", err)
