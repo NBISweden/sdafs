@@ -16,6 +16,8 @@ import (
 	"github.com/winfsp/cgofuse/fuse"
 )
 
+const CHECK_MOUNTED_DELAY = 100 * time.Millisecond
+
 func CGOFuseAvailable() bool {
 	return true
 }
@@ -49,8 +51,8 @@ func Mount(mp string, fs *sdafs.SDAfs, options string) (*Adapter, error) {
 	go func() {
 
 		for checkForMount {
-			time.Sleep(200 * time.Millisecond)
-			os.Stat(mp)
+			time.Sleep(CHECK_MOUNTED_DELAY)
+			os.Stat(mp) //nolint:errcheck
 		}
 	}()
 
