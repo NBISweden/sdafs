@@ -32,6 +32,10 @@ func getUidGidSlice() ([]string, error) {
 
 	nums := strings.Split(s, ":")
 
+	if len(nums) < 2 {
+		return nil, fmt.Errorf("marker format doesn't match expectations")
+	}
+
 	return nums, nil
 }
 
@@ -130,6 +134,11 @@ func reExecRun(m *mainConfig) error {
 		},
 		GidMappings: []syscall.SysProcIDMap{
 			{ContainerID: realGid, HostID: os.Getgid(), Size: 1},
+		},
+
+		Credential: &syscall.Credential{
+			Uid: uint32(realUid),
+			Gid: uint32(realGid),
 		},
 	}
 
