@@ -118,7 +118,7 @@ func reExecNewNS() error {
 	// We need to report the exit status as our own
 
 	if cmd.ProcessState == nil {
-		return fmt.Errorf("process state is nil afted successful run?")
+		return fmt.Errorf("process state is nil after successful run?")
 	}
 
 	os.Exit(cmd.ProcessState.ExitCode())
