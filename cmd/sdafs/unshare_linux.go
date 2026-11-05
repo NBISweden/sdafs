@@ -24,38 +24,50 @@ func isReExec() bool {
 	return os.Getenv(REEXEC_MARKER) != ""
 }
 
-func getUidGidSlice() ([]string, error) {
+func getUidGidSlice() ([]uint32, error) {
 	s := os.Getenv(REEXEC_MARKER)
 	if s == "" {
 		return nil, fmt.Errorf("%s unexpectedly empty", REEXEC_MARKER)
 	}
 
-	nums := strings.Split(s, ":")
+	numstrs := strings.Split(s, ":")
 
-	if len(nums) < 2 {
+	if len(numstrs) < 2 {
 		return nil, fmt.Errorf("marker format doesn't match expectations")
+	}
+
+	var nums []uint32
+
+	for i := range numstrs {
+
+		n, err := strconv.ParseUint(numstrs[i], 10, 32)
+		if err != nil {
+			return nums, err
+		}
+
+		nums = append(nums, uint32(n))
 	}
 
 	return nums, nil
 }
 
-func getUid() (int, error) {
+func getUid() (uint32, error) {
 	nums, err := getUidGidSlice()
 	if err != nil {
 		return 0, fmt.Errorf("bad info in %s: %w", REEXEC_MARKER, err)
 	}
 
-	return strconv.Atoi(nums[0])
+	return nums[0], nil
 }
 
 // getGid
-func getGid() (int, error) {
+func getGid() (uint32, error) {
 	nums, err := getUidGidSlice()
 	if err != nil {
 		return 0, fmt.Errorf("bad info in %s: %w", REEXEC_MARKER, err)
 	}
 
-	return strconv.Atoi(nums[1])
+	return nums[1], nil
 }
 
 func reExecNewNS() error {
@@ -130,15 +142,15 @@ func reExecRun(m *mainConfig) error {
 		Unshareflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUSER | syscall.CLONE_FILES,
 
 		UidMappings: []syscall.SysProcIDMap{
-			{ContainerID: realUid, HostID: os.Getuid(), Size: 1},
+			{ContainerID: int(realUid), HostID: os.Getuid(), Size: 1},
 		},
 		GidMappings: []syscall.SysProcIDMap{
-			{ContainerID: realGid, HostID: os.Getgid(), Size: 1},
+			{ContainerID: int(realGid), HostID: os.Getgid(), Size: 1},
 		},
 
 		Credential: &syscall.Credential{
-			Uid: uint32(realUid),
-			Gid: uint32(realGid),
+			Uid: realUid,
+			Gid: realGid,
 		},
 	}
 
