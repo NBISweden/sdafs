@@ -78,6 +78,7 @@ func Mount(mp string, fs *sdafs.SDAfs, options string) (*Adapter, error) {
 	}()
 
 	err := <-c
+	checkForMount = false
 
 	return a, err
 }
