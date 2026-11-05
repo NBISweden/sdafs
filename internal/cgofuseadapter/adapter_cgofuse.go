@@ -51,7 +51,13 @@ func Mount(mp string, fs *sdafs.SDAfs, options string) (*Adapter, error) {
 	go func() {
 
 		for checkForMount {
+			// We loop here to trigger operations that will make the adapter
+			// signal that it's mounted. We don't need to worry about
+			// synchronisation since it's only a boolean and testing a few
+			// extra times doesn't hurt
+
 			time.Sleep(CHECK_MOUNTED_DELAY)
+
 			os.Stat(mp) //nolint:errcheck
 		}
 	}()
