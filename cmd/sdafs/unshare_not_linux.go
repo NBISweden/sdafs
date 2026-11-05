@@ -10,6 +10,6 @@ func reExecNewNS() error {
 	return nil
 }
 
-func reExecTool(m *main) error {
+func reExecRun(m *main) error {
 	return nil
 }
