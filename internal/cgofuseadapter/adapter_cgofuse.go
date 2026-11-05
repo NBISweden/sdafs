@@ -25,9 +25,13 @@ type filesystembase = fuse.FileSystemBase
 type hostType = fuse.FileSystemHost
 
 func Mount(mp string, fs *sdafs.SDAfs, options string) (*Adapter, error) {
+	c := make(chan error, 1)
+
 	a := &Adapter{
-		fs:         fs,
-		mountpoint: mp,
+		fs:          fs,
+		mountpoint:  mp,
+		statusChan:  c,
+		destroyChan: make(chan bool, 1),
 	}
 
 	var mountOptions []string = nil
@@ -37,15 +41,19 @@ func Mount(mp string, fs *sdafs.SDAfs, options string) (*Adapter, error) {
 	}
 
 	a.host = fuse.NewFileSystemHost(a)
-	mounted := a.host.Mount(mp, mountOptions)
 
-	var reterr error
-	if !mounted {
-		slog.Info("cgofuse mount failed for unknown reason")
-		reterr = fmt.Errorf("cgofuse mount failed")
-	}
+	go func() {
+		mounted := a.host.Mount(mp, mountOptions)
 
-	return a, reterr
+		if !mounted {
+			slog.Info("cgofuse mount failed for unknown reason")
+			c <- fmt.Errorf("cgofuse mount failed")
+		}
+	}()
+
+	err := <-c
+
+	return a, err
 }
 
 func attribToStat(a *sdafs.InodeAttributes, st *Stat_t) {
