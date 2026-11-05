@@ -76,7 +76,9 @@ func (m *mockSDA) LookUpInode(_ context.Context, op *sdafs.LookUpInodeOp) error 
 
 func TestGetattr(t *testing.T) {
 	mock := mockSDA{}
-	a := &Adapter{fs: &mock}
+	a := &Adapter{fs: &mock,
+		statusChan: make(chan error, 1),
+	}
 
 	st := Stat_t{}
 	ret := a.Getattr("/", &st, 100)
@@ -114,7 +116,9 @@ func TestGetattr(t *testing.T) {
 
 func TestReaddir(t *testing.T) {
 	mock := mockSDA{}
-	a := &Adapter{fs: &mock}
+	a := &Adapter{fs: &mock,
+		statusChan: make(chan error, 1),
+	}
 
 	seenStats := make([]Stat_t, 0)
 	seenNames := make([]string, 0)
@@ -168,7 +172,9 @@ func TestReaddir(t *testing.T) {
 
 func TestRelease(t *testing.T) {
 	mock := mockSDA{}
-	a := &Adapter{fs: &mock}
+	a := &Adapter{fs: &mock,
+		statusChan: make(chan error, 1),
+	}
 
 	ret := a.Release("/", 100)
 	assert.Zero(t, ret, "Release failed unexpectedly")
@@ -189,7 +195,9 @@ func TestRelease(t *testing.T) {
 
 func TestReleaseDir(t *testing.T) {
 	mock := mockSDA{}
-	a := &Adapter{fs: &mock}
+	a := &Adapter{fs: &mock,
+		statusChan: make(chan error, 1),
+	}
 
 	ret := a.ReleaseDir("/", 100)
 	assert.Zero(t, ret, "ReleaseDir failed unexpectedly")
@@ -201,7 +209,9 @@ func TestReleaseDir(t *testing.T) {
 
 func TestAccess(t *testing.T) {
 	mock := mockSDA{}
-	a := &Adapter{fs: &mock}
+	a := &Adapter{fs: &mock,
+		statusChan: make(chan error, 1),
+	}
 
 	ret := a.Access("/", 0)
 	assert.Zero(t, ret, "Access failed unexpectedly")
@@ -216,7 +226,9 @@ func TestAccess(t *testing.T) {
 
 func TestStatFS(t *testing.T) {
 	mock := mockSDA{}
-	a := &Adapter{fs: &mock}
+	a := &Adapter{fs: &mock,
+		statusChan: make(chan error, 1),
+	}
 
 	st := Statfs_t{}
 	ret := a.Statfs("/", &st)
@@ -226,7 +238,9 @@ func TestStatFS(t *testing.T) {
 
 func TestOpenDir(t *testing.T) {
 	mock := mockSDA{}
-	a := &Adapter{fs: &mock}
+	a := &Adapter{fs: &mock,
+		statusChan: make(chan error, 1),
+	}
 
 	ret, _ := a.Opendir("/")
 	assert.Zero(t, ret, "OpenDir failed unexpectedly")
@@ -251,7 +265,9 @@ func TestOpenDir(t *testing.T) {
 
 func TestOpen(t *testing.T) {
 	mock := mockSDA{}
-	a := &Adapter{fs: &mock}
+	a := &Adapter{fs: &mock,
+		statusChan: make(chan error, 1),
+	}
 
 	ret, _ := a.Open("/somepath", 2)
 	assert.NotZero(t, ret, "Open worked unexpectedly")
@@ -279,7 +295,9 @@ func TestOpen(t *testing.T) {
 
 func TestRead(t *testing.T) {
 	mock := mockSDA{}
-	a := &Adapter{fs: &mock}
+	a := &Adapter{fs: &mock,
+		statusChan: make(chan error, 1),
+	}
 	buf := make([]byte, 65536)
 
 	mock.lookupReturn = fmt.Errorf("fail")
@@ -303,7 +321,9 @@ func TestRead(t *testing.T) {
 
 func TestFilenameToInode(t *testing.T) {
 	mock := mockSDA{}
-	a := &Adapter{fs: &mock}
+	a := &Adapter{fs: &mock,
+		statusChan: make(chan error, 1),
+	}
 
 	lookupTester := func(op *sdafs.LookUpInodeOp) {
 
