@@ -21,10 +21,11 @@ type MountedFS interface {
 
 // Adapter is the struct that keeps all information for this adapter
 type Adapter struct {
-	fs         sda
-	mountpoint string
-	host       *hostType
-
+	fs          sda
+	mountpoint  string
+	host        *hostType
+	statusChan  chan error
+	destroyChan chan bool
 	filesystembase
 }
 
@@ -39,8 +40,12 @@ type sda interface {
 }
 
 func (a *Adapter) Join(context.Context) error {
-	// cgofuse mount call will not return until the filesystem is unmounted
-	// so nothing to do here
+
+	if a.fs == nil || a.host == nil {
+		return fmt.Errorf("Join called unexpectedly")
+	}
+
+	<-a.destroyChan
 
 	return nil
 }
@@ -396,4 +401,14 @@ func (a *Adapter) Read(path string,
 	}
 
 	return op.BytesRead
+}
+
+func (a *Adapter) Init() {
+	slog.Debug("cgofuse Init called")
+	a.statusChan <- nil
+}
+
+func (a *Adapter) Destroy() {
+	slog.Debug("cgofuse Destroy called")
+	a.destroyChan <- true
 }
