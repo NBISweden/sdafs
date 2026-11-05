@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"strconv"
@@ -43,6 +44,10 @@ func getUidGidSlice() ([]uint32, error) {
 		n, err := strconv.ParseUint(numstrs[i], 10, 32)
 		if err != nil {
 			return nums, err
+		}
+
+		if n > math.MaxInt || n > math.MaxUint32 {
+			return nums, fmt.Errorf("number doesn't fit in required types")
 		}
 
 		nums = append(nums, uint32(n))
