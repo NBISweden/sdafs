@@ -144,7 +144,7 @@ func reExecRun(m *mainConfig) error {
 	}
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Unshareflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUSER | syscall.CLONE_FILES,
+		Unshareflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUSER,
 
 		UidMappings: []syscall.SysProcIDMap{
 			{ContainerID: int(realUid), HostID: os.Getuid(), Size: 1},
@@ -154,8 +154,9 @@ func reExecRun(m *mainConfig) error {
 		},
 
 		Credential: &syscall.Credential{
-			Uid: realUid,
-			Gid: realGid,
+			Uid:         realUid,
+			Gid:         realGid,
+			NoSetGroups: true,
 		},
 	}
 
