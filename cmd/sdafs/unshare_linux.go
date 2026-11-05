@@ -97,7 +97,7 @@ func reExecNewNS() error {
 	// We need to report the exit status as our own
 
 	if cmd.ProcessState == nil {
-		return fmt.Errorf("processtate is nil afted successful run?")
+		return fmt.Errorf("proces state is nil afted successful run?")
 	}
 
 	os.Exit(cmd.ProcessState.ExitCode())
@@ -163,7 +163,7 @@ func reExecRun(m *mainConfig) error {
 
 	// We need to report the exit status as our own
 	if cmd.ProcessState == nil {
-		return fmt.Errorf("processtate is nil afted successful run?")
+		return fmt.Errorf("proces state is nil afted successful run?")
 	}
 
 	os.Exit(cmd.ProcessState.ExitCode())
