@@ -39,13 +39,18 @@ type sda interface {
 	ReleaseFileHandle(_ context.Context, op *sdafs.ReleaseFileHandleOp) error
 }
 
-func (a *Adapter) Join(context.Context) error {
+func (a *Adapter) Join(ctx context.Context) error {
 
 	if a.fs == nil || a.host == nil {
 		return fmt.Errorf("Join called unexpectedly")
 	}
 
-	<-a.destroyChan
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("timeout while waiting for unmount: %w", ctx.Err())
+	case <-a.destroyChan:
+		return nil
+	}
 
 	return nil
 }
