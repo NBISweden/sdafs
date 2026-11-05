@@ -80,7 +80,7 @@ func reExecNewNS() error {
 	cmd.Stderr = os.Stderr
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Unshareflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUSER | syscall.CLONE_FS,
+		Unshareflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUSER,
 
 		UidMappings: []syscall.SysProcIDMap{
 			{ContainerID: 0, HostID: os.Getuid(), Size: 1},
