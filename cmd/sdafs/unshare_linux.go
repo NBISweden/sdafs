@@ -127,11 +127,9 @@ func reExecRun(m *mainConfig) error {
 
 		UidMappings: []syscall.SysProcIDMap{
 			{ContainerID: realUid, HostID: os.Getuid(), Size: 1},
-			// {ContainerID: rootUid, HostID: 0, Size: 1},
 		},
 		GidMappings: []syscall.SysProcIDMap{
 			{ContainerID: realGid, HostID: os.Getgid(), Size: 1},
-			//{ContainerID: 0, HostID: rootGid, Size: 1},
 		},
 	}
 
