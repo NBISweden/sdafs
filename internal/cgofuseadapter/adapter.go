@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -26,6 +27,8 @@ type Adapter struct {
 	host        *hostType
 	statusChan  chan error
 	destroyChan chan bool
+	statusSent  bool
+	statusLock  sync.Mutex
 	filesystembase
 }
 
@@ -37,6 +40,19 @@ type sda interface {
 	GetInodeAttributes(_ context.Context, op *sdafs.GetInodeAttributesOp) error
 	LookUpInode(_ context.Context, op *sdafs.LookUpInodeOp) error
 	ReleaseFileHandle(_ context.Context, op *sdafs.ReleaseFileHandleOp) error
+}
+
+func (a *Adapter) sendStatus() {
+	a.statusLock.Lock()
+	defer a.statusLock.Unlock()
+
+	if a.statusSent {
+		return
+	}
+
+	// Signal that we're up
+	a.statusChan <- nil
+	a.statusSent = true
 }
 
 func (a *Adapter) Join(ctx context.Context) error {
@@ -51,12 +67,12 @@ func (a *Adapter) Join(ctx context.Context) error {
 	case <-a.destroyChan:
 		return nil
 	}
-
-	return nil
 }
 
 // Getattr adapts Getattr between cgofuse and ja fuse APIs
 func (a *Adapter) Getattr(path string, st *Stat_t, handle uint64) int {
+	a.sendStatus()
+
 	inode, err := a.filenameToInode(path)
 
 	if err != nil {
@@ -81,6 +97,9 @@ func (a *Adapter) Getattr(path string, st *Stat_t, handle uint64) int {
 
 // Statfs adapts Statfs between cgofuse and ja fuse APIs
 func (a *Adapter) Statfs(path string, st *Statfs_t) int {
+
+	a.sendStatus()
+
 	// We shortcut here for now and don't call our statfs since
 	// it's so stubby anyway
 
@@ -91,6 +110,8 @@ func (a *Adapter) Statfs(path string, st *Statfs_t) int {
 
 // Opendir adapts Opendir between cgofuse and ja fuse APIs
 func (a *Adapter) Opendir(path string) (int, uint64) {
+	a.sendStatus()
+
 	inode, err := a.filenameToInode(path)
 
 	if err != nil {
@@ -115,6 +136,8 @@ func (a *Adapter) Readdir(path string,
 	fill func(name string, stat *Stat_t, ofst int64) bool,
 	offset int64,
 	handle uint64) int {
+
+	a.sendStatus()
 
 	inode, err := a.filenameToInode(path)
 
@@ -202,6 +225,8 @@ func (a *Adapter) Readdir(path string,
 }
 
 func (a *Adapter) filenameToInode(path string) (sdafs.InodeID, error) {
+
+	a.sendStatus()
 
 	inode := sdafs.InodeID(sdafs.RootInodeID)
 
@@ -304,6 +329,8 @@ func getDirent(in []byte) (*sdafs.Dirent, []byte, error) {
 // Access adapts Access between cgofuse and jacobsa fuse APIs
 // for cgofuse we only support wide open so access is always accepted
 func (a *Adapter) Access(path string, mask uint32) int {
+	a.sendStatus()
+
 	// W_OK is 2
 	if mask&2 > 0 {
 		return -mapError(syscall.EROFS)
@@ -322,6 +349,8 @@ func (a *Adapter) Access(path string, mask uint32) int {
 
 // Release adapts Close between cgofuse and jacobsa fuse APIs
 func (a *Adapter) Release(path string, fh uint64) int {
+	a.sendStatus()
+
 	_, err := a.filenameToInode(path)
 
 	if err != nil {
@@ -343,6 +372,8 @@ func (a *Adapter) Release(path string, fh uint64) int {
 
 // ReleaseDir adapts Closedir between cgofuse and jacobsa fuse APIs
 func (a *Adapter) ReleaseDir(path string, fh uint64) int {
+	a.sendStatus()
+
 	_, err := a.filenameToInode(path)
 
 	if err != nil {
@@ -354,6 +385,7 @@ func (a *Adapter) ReleaseDir(path string, fh uint64) int {
 
 // Open adapts Open for file between cgofuse and jacobsa fuse APIs
 func (a *Adapter) Open(path string, flags int) (int, uint64) {
+	a.sendStatus()
 
 	for _, flag := range []int{os.O_WRONLY, os.O_RDWR, os.O_CREATE, os.O_TRUNC, os.O_EXCL, os.O_APPEND} {
 		if flags&flag > 0 {
@@ -385,6 +417,8 @@ func (a *Adapter) Read(path string,
 	buf []byte,
 	offset int64,
 	handle uint64) int {
+	a.sendStatus()
+
 	inode, err := a.filenameToInode(path)
 
 	if err != nil {
@@ -410,7 +444,6 @@ func (a *Adapter) Read(path string,
 
 func (a *Adapter) Init() {
 	slog.Debug("cgofuse Init called")
-	a.statusChan <- nil
 }
 
 func (a *Adapter) Destroy() {

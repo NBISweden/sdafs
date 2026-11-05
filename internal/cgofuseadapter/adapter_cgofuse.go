@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/NBISweden/sdafs/internal/sdafs"
 	"github.com/winfsp/cgofuse/fuse"
@@ -42,15 +44,27 @@ func Mount(mp string, fs *sdafs.SDAfs, options string) (*Adapter, error) {
 
 	a.host = fuse.NewFileSystemHost(a)
 
+	checkForMount := true
+
+	go func() {
+
+		for checkForMount {
+			time.Sleep(200 * time.Millisecond)
+			os.Stat(mp)
+		}
+	}()
+
 	go func() {
 		mounted := a.host.Mount(mp, mountOptions)
+
+		checkForMount = false
 
 		if !mounted {
 			slog.Info("cgofuse mount failed for unknown reason")
 			c <- fmt.Errorf("cgofuse mount failed")
 
 			// If Init was called for some reason and we already signaled
-			// success, make sure that Join doesn't wait
+			// success, make sure that Join doesn't wait (this shouldn't happen)
 			a.destroyChan <- true
 		}
 	}()
