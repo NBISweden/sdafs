@@ -328,11 +328,9 @@ func main() {
 	if c.run != "" && !isReExec() {
 		err := reExecNewNS()
 
-		if err != nil {
-			log.Fatalf("failed to re-execute for unsharing: %v", err)
-		}
+		// Only returns on failures
 
-		log.Fatalf("unexpected state after reexec, we shouldn't get here")
+		log.Fatalf("failed to re-execute for unsharing: %v", err)
 	}
 
 	checkMountDir(c)
@@ -352,9 +350,9 @@ func main() {
 	if c.run != "" {
 		err = reExecRun(&c)
 
-		if err != nil {
-			slog.Error("error while running tool", "err", err)
-		}
+		// Only returns on failures
+
+		log.Fatalf("error when running requested %s: %v", c.run, err)
 	}
 
 	afterMount(c, mount)
