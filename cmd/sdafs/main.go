@@ -114,7 +114,7 @@ func getConfigs() mainConfig {
 
 	// foregound mandatory on Windows for now
 	if runtime.GOOS != "windows" {
-		flag.BoolVar(&foreground, "foreground", false, "Do not detach, run in foreground and send log output to stdout")
+		flag.BoolVar(&foreground, "foreground", false, "Do not detach, run in foreground and send log output to stderr")
 	} else {
 		foreground = true
 	}
