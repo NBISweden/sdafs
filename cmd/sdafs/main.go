@@ -187,6 +187,11 @@ func getConfigs() mainConfig {
 		defer testOpen.Close() // nolint:errcheck
 	}
 
+	if run != "" {
+		// Don't detach if running something
+		foreground = true
+	}
+
 	useLogFile := logFile
 	// Background and logfile not specified
 	if !foreground && logFile == "" {
@@ -263,11 +268,6 @@ func getConfigs() mainConfig {
 				mountPoint,
 				err)
 		}
-	}
-
-	if run != "" {
-		// Don't detach if running something
-		foreground = true
 	}
 
 	m := mainConfig{mountPoint: mountPoint,
