@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -111,17 +112,21 @@ func reExecNewNS() error {
 		},
 	}
 
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("error while reexecing for unshare: %w", err)
+	err = cmd.Run()
+
+	if err != nil {
+		// just check if err is an *exec.ExitError, we don't need the actual
+		// error in that case because we can access it from cmd.ProcessState
+		_, isExit := errors.AsType[*exec.ExitError](err)
+
+		if !isExit {
+			return fmt.Errorf("error while reexecing for unshare: %w", err)
+		}
 	}
 
-	// We need to report the exit status as our own
+	// Carry over the exit state of the child
+	reproduceExit(cmd.ProcessState)
 
-	if cmd.ProcessState == nil {
-		return fmt.Errorf("process state is nil after successful run?")
-	}
-
-	os.Exit(cmd.ProcessState.ExitCode())
 	return nil
 }
 
@@ -168,16 +173,25 @@ func reExecRun(m *mainConfig) error {
 			err)
 	}
 
-	if err := cmd.Run(); err != nil {
-		umountErr := fuse.Unmount(m.mountPoint)
-		if umountErr != nil {
-			/// Just flag this error
-			log.Printf(
-				"error while unmounting for cleanup after failure: %v",
-				umountErr)
-		}
+	err = cmd.Run()
 
-		return fmt.Errorf("error while reexecing for run: %w", err)
+	if err != nil {
+
+		// just check if err is an *exec.ExitError
+		_, isExit := errors.AsType[*exec.ExitError](err)
+
+		if !isExit {
+			// not just exit code non-zero
+			umountErr := fuse.Unmount(m.mountPoint)
+			if umountErr != nil {
+				/// Just flag this error
+				log.Printf(
+					"error while unmounting for cleanup after failure: %v",
+					umountErr)
+			}
+
+			return fmt.Errorf("error while reexecing for run: %w", err)
+		}
 	}
 
 	//
@@ -186,11 +200,42 @@ func reExecRun(m *mainConfig) error {
 		return fmt.Errorf("couldn't unmount after run: %w", err)
 	}
 
-	// We need to report the exit status as our own
-	if cmd.ProcessState == nil {
-		return fmt.Errorf("process state is nil afted successful run?")
+	reproduceExit(cmd.ProcessState)
+	return nil
+}
+
+func reproduceExit(p *os.ProcessState) {
+	// We shouldreport the exit status as our own
+	if p == nil {
+		// We shouldn't get here without a valid ProcessState, bail out
+		os.Exit(1)
 	}
 
-	os.Exit(cmd.ProcessState.ExitCode())
-	return nil
+	if p.Exited() {
+		os.Exit(p.ExitCode())
+	}
+
+	// Signal
+
+	waitStatus, ok := p.Sys().(syscall.WaitStatus)
+	if !ok {
+		// This was unexpected, not sure what we should do here, signal
+		// some error at least
+		os.Exit(1)
+	}
+
+	// Try to send the signal to ourselves
+	proc, err := os.FindProcess(os.Getpid())
+	if err != nil {
+		os.Exit(128 + int(waitStatus.Signal()))
+	}
+
+	err = proc.Signal(waitStatus.Signal())
+
+	if err != nil {
+		os.Exit(128 + int(waitStatus.Signal()))
+	}
+
+	// Fake the signal
+	os.Exit(128 + int(waitStatus.Signal()))
 }
