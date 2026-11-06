@@ -205,7 +205,7 @@ func reExecRun(m *mainConfig) error {
 }
 
 func reproduceExit(p *os.ProcessState) {
-	// We shouldreport the exit status as our own
+	// We should report the exit status as our own
 	if p == nil {
 		// We shouldn't get here without a valid ProcessState, bail out
 		os.Exit(1)
