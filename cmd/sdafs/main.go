@@ -287,7 +287,7 @@ func getConfigs() mainConfig {
 // repointLog switches where the log goes if needed
 func repointLog(m mainConfig) {
 
-	var logDestination io.Writer = os.Stdout
+	var logDestination io.Writer = os.Stderr
 
 	if m.logFile != "" {
 		var err error
