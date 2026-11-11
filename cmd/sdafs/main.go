@@ -342,6 +342,15 @@ func main() {
 
 	repointLog(c)
 
+	serverInfo, err := fs.ServerInfo()
+
+	if err != nil {
+		log.Fatalf("Error from serverinfo: %v", err)
+	}
+
+	log.Printf("Connected to service %s operated by %s",
+		c.sdafsconf.RootURL, serverInfo.Organization.Name)
+
 	mount, err := detachAndMount(c, fs)
 	if err != nil {
 		log.Fatalf("Error while mounting: %v", err)
