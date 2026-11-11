@@ -24,6 +24,22 @@ import (
 	"github.com/tj/assert"
 )
 
+const SERVICEINFO = `{
+  "id": "neicnordic.sda.download",
+  "name": "SDA Download",
+  "type": {
+    "group": "org.ga4gh",
+    "artifact": "drs",
+    "version": "1.0.0"
+  },
+  "organization": {
+    "name": "sda test setup",
+    "url": "https://localhost"
+  },
+  "version": "2.0.0"
+}
+`
+
 func uid() uint32 {
 	currentUser, err := user.Current()
 	if err == nil {
@@ -55,21 +71,7 @@ func preLoadDatasetResponses(t *testing.T) {
 		"nextPageToken": null}`))
 
 	httpmock.RegisterResponder("GET", "https://my.sda.local/service-info",
-		httpmock.NewStringResponder(200, `{
-  "id": "neicnordic.sda.download",
-  "name": "SDA Download",
-  "type": {
-    "group": "org.ga4gh",
-    "artifact": "drs",
-    "version": "1.0.0"
-  },
-  "organization": {
-    "name": "sda test setup",
-    "url": "https://localhost"
-  },
-  "version": "2.0.0"
-}
-`))
+		httpmock.NewStringResponder(200, SERVICEINFO))
 
 	httpmock.RegisterResponder("GET",
 		"https://my.sda.local/datasets/dataset1",
@@ -339,6 +341,64 @@ func TestConfOptions(t *testing.T) {
 	assert.Equal(t, uint32(1200), sda.Group, "Did not pick up group as expected")
 }
 
+func TestServerInfo(t *testing.T) {
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+
+	c := Conf{
+		RootURL:         "https://my.sda.local",
+		CredentialsFile: "test.ini",
+		HTTPClient:      http.DefaultClient,
+	}
+	preLoadDatasetResponses(t)
+	sda, err := NewSDAfs(&c)
+
+	assert.NotNil(t, sda, "No sda although we should have gotten one")
+	assert.Nil(t, err, "Unexpected error")
+
+	goodsi, err := sda.verifyServer()
+	assert.NotNil(t, goodsi, "No serverinfo when we should have one?")
+	assert.Nil(t, err, "Unexpected error")
+
+	httpmock.RegisterResponder("GET", "https://my.sda.local/service-info",
+		httpmock.NewStringResponder(500, "Something wrong"))
+
+	si, err := sda.verifyServer()
+	assert.Nil(t, si, "Got a serverinfo when we should not")
+	assert.NotNil(t, err, "No error when expected")
+
+	httpmock.RegisterResponder("GET", "https://my.sda.local/service-info",
+		httpmock.NewStringResponder(200, `{}`))
+
+	si, err = sda.verifyServer()
+	assert.Nil(t, si, "Got a serverinfo when we should not")
+	assert.NotNil(t, err, "No error when expected")
+
+	httpmock.RegisterResponder("GET", "https://my.sda.local/service-info",
+		httpmock.NewStringResponder(200, `{}`))
+
+	si, err = sda.verifyServer()
+	assert.Nil(t, si, "Got a serverinfo when we should not")
+	assert.NotNil(t, err, "No error when expected")
+
+	httpmock.RegisterResponder("GET", "https://my.sda.local/service-info",
+		httpmock.NewStringResponder(200, `{"broken json'`))
+
+	si, err = sda.verifyServer()
+	assert.Nil(t, si, "Got a serverinfo when we should not")
+	assert.NotNil(t, err, "No error when expected")
+
+	sda.serverInfo = nil
+	si, err = sda.ServerInfo()
+	assert.Nil(t, si, "Got a serverinfo when we should not")
+	assert.NotNil(t, err, "No error when expected")
+
+	sda.serverInfo = goodsi
+	si, err = sda.ServerInfo()
+	assert.NotNil(t, si, "No serverinfo when we should have one?")
+	assert.Nil(t, err, "Unexpected error")
+}
+
 func TestNewSDAfs(t *testing.T) {
 	sda, err := NewSDAfs(nil)
 
@@ -466,6 +526,13 @@ func TestSessionHandling(t *testing.T) {
 
 	http.HandleFunc("/",
 		func(w http.ResponseWriter, r *http.Request) {
+
+			if r.URL.Path == "/service-info" {
+				// don't count this one
+				w.WriteHeader(200)
+				w.Write([]byte(SERVICEINFO)) // nolint:errcheck
+				return
+			}
 
 			count++
 			t.Logf("http helper call %d", count)
