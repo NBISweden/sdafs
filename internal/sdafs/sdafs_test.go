@@ -54,6 +54,23 @@ func preLoadDatasetResponses(t *testing.T) {
 		httpmock.NewStringResponder(200, `{"datasets": ["dataset1", "dataset2", "dataset3"], 
 		"nextPageToken": null}`))
 
+	httpmock.RegisterResponder("GET", "https://my.sda.local/service-info",
+		httpmock.NewStringResponder(200, `{
+  "id": "neicnordic.sda.download",
+  "name": "SDA Download",
+  "type": {
+    "group": "org.ga4gh",
+    "artifact": "drs",
+    "version": "1.0.0"
+  },
+  "organization": {
+    "name": "sda test setup",
+    "url": "https://localhost"
+  },
+  "version": "2.0.0"
+}
+`))
+
 	httpmock.RegisterResponder("GET",
 		"https://my.sda.local/datasets/dataset1",
 		httpmock.NewStringResponder(200, `{"files": 10, "size":20, "date":"2026-06-30T14:06:58Z"}`))
