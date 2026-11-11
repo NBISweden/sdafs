@@ -18,13 +18,13 @@ type ServerType struct {
 }
 
 type ServerInfo struct {
-	ID           string             `json:"id"`
-	Name         string             `json:"name"`
-	Description  string             `json:"description"`
-	Version      string             `json:"version"`
-	Environment  string             `json:"environment"`
-	Organization ServerOrganization `json:"organization"`
-	Type         ServerType         `json:"type"`
+	ID           string              `json:"id"`
+	Name         string              `json:"name"`
+	Description  string              `json:"description"`
+	Version      string              `json:"version"`
+	Environment  string              `json:"environment"`
+	Organization *ServerOrganization `json:"organization"`
+	Type         *ServerType         `json:"type"`
 }
 
 // verifyServer checks that the
@@ -36,18 +36,31 @@ func (s *SDAfs) verifyServer() (*ServerInfo, error) {
 		return nil, fmt.Errorf("request to service info failed: %w", err)
 	}
 
+	defer resp.Body.Close() //nolint:errcheck
+
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("unexpected status (%d) while fetching service info",
 			resp.StatusCode)
 	}
 
 	servicetext, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failure while reading service-info: %w", err)
+	}
 
 	si := ServerInfo{}
 	err = jsonv2.Unmarshal(servicetext, &si)
 
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal of service-info failed: %w", err)
+	}
+
+	if si.Name == "" ||
+		si.ID == "" ||
+		si.Version == "" ||
+		si.Organization == nil ||
+		si.Type == nil {
+		return nil, fmt.Errorf("incorrect server info received")
 	}
 
 	return &si, nil
