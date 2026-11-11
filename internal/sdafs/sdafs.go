@@ -109,6 +109,9 @@ type SDAfs struct {
 	// tokenLoadTime keeps track of when we last fetched the token from the
 	// credentials file, used to decide if we should reread
 	tokenLoadTime time.Time
+
+	// serverInfo has information about the server we've connected to
+	serverInfo *ServerInfo
 }
 
 type handle struct {
@@ -473,6 +476,15 @@ type datasetFile struct {
 	DownloadURL               string `json:"downloadURL"`
 }
 
+func (s *SDAfs) ServerInfo() (*ServerInfo, error) {
+
+	if s.serverInfo == nil {
+		return nil, fmt.Errorf("serverinfo not available")
+	}
+
+	return s.serverInfo, nil
+}
+
 func NewSDAfs(conf *Conf) (*SDAfs, error) {
 	n := new(SDAfs)
 	n.conf = conf
@@ -481,6 +493,13 @@ func NewSDAfs(conf *Conf) (*SDAfs, error) {
 	if err != nil {
 		return nil, fmt.Errorf("setup failed: %w", err)
 	}
+
+	si, err := n.verifyServer()
+	if err != nil {
+		return nil, fmt.Errorf("verification of server failed: %w (is this a download server?)", err)
+	}
+
+	n.serverInfo = si
 
 	err = n.VerifyCredentials()
 
