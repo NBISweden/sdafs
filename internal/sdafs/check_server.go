@@ -38,7 +38,7 @@ func (s *SDAfs) verifyServer() (*ServerInfo, error) {
 
 	defer resp.Body.Close() //nolint:errcheck
 
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("unexpected status (%d) while fetching service info",
 			resp.StatusCode)
 	}
