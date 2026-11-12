@@ -56,7 +56,7 @@ func (s *SDAfs) verifyServer() (*ServerInfo, error) {
 	}
 
 	if si.Name == "" ||
-		si.ID == "" ||
+		si.ID != "neicnordic.sda.download" ||
 		si.Version == "" ||
 		si.Organization == nil ||
 		si.Type == nil {
