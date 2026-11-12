@@ -335,7 +335,9 @@ func (s *SDAfs) doRequest(relPath, method string, extras ...string) (*http.Respo
 			reqURL, err)
 	}
 
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", s.token))
+	if s.token != "" {
+		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", s.token))
+	}
 
 	// Add extra headers picked up, e.g. cookies
 	if s.extraHeader != nil {
