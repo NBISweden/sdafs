@@ -1,0 +1,87 @@
+name: SDA Download access tests
+
+on:
+  pull_request:
+    paths:
+      - "**.go"
+
+permissions: {}
+
+jobs:
+  test:
+    permissions:
+      contents: read
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get fuse bindings
+        run: "sudo apt update && \
+          sudo apt install --yes libfuse-dev  linux-libc-dev"
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
+        with:
+          go-version-file: go.mod
+        id: go
+
+      - name: Build sdafs
+        run: go build -v ./...
+
+      - name: Get sda-download-ui and user their server setup
+        run: |
+          git clone https://github.com/NBISweden/sda-download-ui.git
+          pushd sda-download-ui/dev-tools
+          cp config.yaml.example config.yaml
+          docker compose -f sda-dev-stack.yml up -d
+
+          # Get a token
+          TOKEN=$(curl -s http://localhost:8001/tokens | jq -r '.[0]')
+          MOUNT=/tmp/mount$$
+
+          popd
+          # Set up config
+          echo "access_token = $TOKEN" > s3cmd.conf
+          mkdir -p "$MOUNT"
+
+          # Launch sdafs to mount
+          ./sdafs -credentialsfile ./s3cmd.conf \
+            -rootURL http://localhost:8085/ \
+            "$MOUNT"
+
+          # Do some operations that could trigger errors
+          find "$MOUNT" -type f -execdir wc '{}' +
+          find "$MOUNT" -type d -execdir ls -l '{}' +
+
+          # Unmount
+          umount "$MOUNT"
+
+          sleep 2
+          # sdafs should have quit now
+          pgrep sdafs || exit 1
+
+
+          # Launch with cgofuse
+          ./sdafs -credentialsfile ./s3cmd.conf \
+            -rootURL http://localhost:8085/ \
+            -usecgofuse \
+            "$MOUNT"
+
+          # Do some operations that could trigger errors
+          find "$MOUNT" -type f -execdir wc '{}' +
+          find "$MOUNT" -type d -execdir ls -l '{}' +
+
+          # Unmount
+          umount "$MOUNT"
+
+          sleep 2
+          # sdafs should have quit now
+          pgrep sdafs || exit 1
+
+          pushd sda-download-ui/dev-tools
+          docker compose -f sda-dev-stack.yml down
